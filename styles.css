@@ -1,0 +1,171 @@
+:root {
+  --bg: #f4f6f8;
+  --card: #ffffff;
+  --text: #142029;
+  --muted: #4d5d69;
+  --accent: #0f766e;
+  --accent-weak: #d2f3ef;
+  --border: #d4dde3;
+  --danger: #b91c1c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: var(--text);
+  background: radial-gradient(circle at 10% 0%, #e7f7f4, transparent 35%), var(--bg);
+}
+
+.hero {
+  padding: 2rem 1rem 1rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 3vw, 2.6rem);
+}
+
+.hero p {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+}
+
+.layout {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.panel-header h2 {
+  margin: 0;
+}
+
+.panel-header p {
+  margin: 0.35rem 0 1rem;
+  color: var(--muted);
+}
+
+.task {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.task:last-child {
+  margin-bottom: 0;
+}
+
+.task-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.task-head h3 {
+  margin: 0;
+}
+
+.hint {
+  color: var(--muted);
+  margin: 0.5rem 0;
+  font-size: 0.95rem;
+}
+
+.status {
+  font-size: 0.86rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--accent-weak);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem;
+  font: inherit;
+  resize: vertical;
+}
+
+.exam-timer {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.8rem;
+  margin-bottom: 0.75rem;
+}
+
+#timer-display {
+  font-size: 1.35rem;
+  color: var(--accent);
+  margin-left: 0.5rem;
+}
+
+.over-time {
+  color: var(--danger) !important;
+}
+
+@media (max-width: 780px) {
+  .hero {
+    padding-top: 1.25rem;
+  }
+}
+
+.config-task select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  background: #fff;
+}
+
+audio {
+  width: 100%;
+  margin: 0.35rem 0 0.5rem;
+}
+
+.prompt-text-block {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 0.6rem;
+  margin: 0.4rem 0 0.6rem;
+  background: #fcfefe;
+}
+
+.hidden {
+  display: none;
+}

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TCF Canada Simulator</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <h1>TCF Canada Practice Simulator</h1>
+      <p>Speaking and writing practice with timing, transcription, and export.</p>
+    </header>
+
+    <main class="layout">
+      <section class="panel" id="speaking-panel">
+        <div class="panel-header">
+          <h2>Speaking</h2>
+          <p>Task 2 and Task 3 oral prompts, replay, and live transcription.</p>
+        </div>
+
+        <div class="task config-task">
+          <div class="task-head">
+            <h3>Prompt Audio Settings</h3>
+          </div>
+          <div class="controls">
+            <label for="tts-provider">TTS Provider</label>
+            <select id="tts-provider">
+              <option value="gemini" selected>Gemini TTS (server)</option>
+              <option value="browser">Browser Voice (offline)</option>
+            </select>
+            <label for="gemini-voice">Gemini Voice</label>
+            <select id="gemini-voice">
+              <option value="Kore">Kore</option>
+              <option value="Aoede">Aoede</option>
+              <option value="Leda">Leda</option>
+              <option value="Puck">Puck</option>
+            </select>
+            <label for="stt-language">Transcription Language</label>
+            <select id="stt-language">
+              <option value="fr-FR" selected>French (France)</option>
+              <option value="fr-CA">French (Canada)</option>
+            </select>
+            <label for="stt-provider">Transcription Engine</label>
+            <select id="stt-provider">
+              <option value="server" selected>Server STT (Google)</option>
+              <option value="browser">Browser STT (Web Speech)</option>
+            </select>
+          </div>
+          <p class="hint">Use Gemini mode when running through local server with <code>GEMINI_API_KEY</code>.</p>
+        </div>
+
+        <div class="task" data-speaking-task="2">
+          <div class="task-head">
+            <h3>Task 2</h3>
+            <span class="status" id="status-speaking-2">Idle</span>
+          </div>
+          <p class="hint">Prompt is read aloud. Use replay if needed.</p>
+          <div class="controls">
+            <button type="button" data-action="task2-bank" data-bank="february">February</button>
+            <button type="button" data-action="task2-bank" data-bank="january">January</button>
+            <button type="button" data-action="task2-bank" data-bank="all">All</button>
+            <span class="status" id="task2-bank-meta">Bank: February</span>
+          </div>
+          <div class="controls">
+            <button type="button" data-action="task2-prev">Previous Question</button>
+            <button type="button" data-action="task2-random">Random Question</button>
+            <button type="button" data-action="task2-next">Next Question</button>
+            <button type="button" data-action="toggle-prompt" data-task="2">Reveal Question Text</button>
+            <span class="status" id="task2-question-meta">Question 1/20</span>
+          </div>
+          <div id="prompt-block-2" class="prompt-text-block hidden">
+            <p id="prompt-speaking-2">Vous appelez le service client d'une compagnie de transport pour signaler un retard et demander une solution. Expliquez la situation et proposez une option.</p>
+          </div>
+          <div class="controls">
+            <button type="button" data-action="play-prompt" data-task="2">Play Prompt</button>
+            <button type="button" data-action="start-rec" data-task="2">Start Recording</button>
+            <button type="button" data-action="stop-rec" data-task="2">Stop Recording</button>
+            <button type="button" data-action="copy-speaking" data-task="2">Copy Transcript</button>
+            <button type="button" data-action="copy-task2-eval">Copy Task 2 For Evaluation</button>
+          </div>
+          <audio id="prompt-audio-2" controls preload="none"></audio>
+          <label for="transcript-speaking-2">Transcript</label>
+          <textarea id="transcript-speaking-2" rows="6" placeholder="Your speaking transcript appears here..."></textarea>
+        </div>
+
+        <div class="task" data-speaking-task="3">
+          <div class="task-head">
+            <h3>Task 3</h3>
+            <span class="status" id="status-speaking-3">Idle</span>
+          </div>
+          <p class="hint">Prompt is read aloud. Use replay if needed.</p>
+          <div class="controls">
+            <button type="button" data-action="toggle-prompt" data-task="3">Reveal Question Text</button>
+          </div>
+          <div id="prompt-block-3" class="prompt-text-block hidden">
+            <p id="prompt-speaking-3">Vous participez à un débat: "Le télétravail améliore-t-il la qualité de vie?" Donnez votre opinion avec des arguments et des exemples.</p>
+          </div>
+          <div class="controls">
+            <button type="button" data-action="play-prompt" data-task="3">Play Prompt</button>
+            <button type="button" data-action="start-rec" data-task="3">Start Recording</button>
+            <button type="button" data-action="stop-rec" data-task="3">Stop Recording</button>
+            <button type="button" data-action="copy-speaking" data-task="3">Copy Transcript</button>
+          </div>
+          <audio id="prompt-audio-3" controls preload="none"></audio>
+          <label for="transcript-speaking-3">Transcript</label>
+          <textarea id="transcript-speaking-3" rows="6" placeholder="Your speaking transcript appears here..."></textarea>
+        </div>
+      </section>
+
+      <section class="panel" id="writing-panel">
+        <div class="panel-header">
+          <h2>Writing</h2>
+          <p>Three tasks with shared timer and word counters.</p>
+        </div>
+
+        <div class="exam-timer">
+          <strong>Total Time</strong>
+          <span id="timer-display">60:00</span>
+          <div class="controls">
+            <button type="button" id="start-timer">Start</button>
+            <button type="button" id="pause-timer">Pause</button>
+            <button type="button" id="reset-timer">Reset</button>
+          </div>
+        </div>
+
+        <div class="task" data-writing-task="1">
+          <div class="task-head">
+            <h3>Task 1</h3>
+            <span class="status" id="word-writing-1">0 words</span>
+          </div>
+          <p class="hint">Write a short practical message (email/note style).</p>
+          <label for="writing-1">Response</label>
+          <textarea id="writing-1" rows="6" placeholder="Write your Task 1 response..."></textarea>
+          <div class="controls">
+            <button type="button" data-action="copy-writing" data-task="1">Copy Task 1</button>
+          </div>
+        </div>
+
+        <div class="task" data-writing-task="2">
+          <div class="task-head">
+            <h3>Task 2</h3>
+            <span class="status" id="word-writing-2">0 words</span>
+          </div>
+          <p class="hint">Write an argument/opinion text with clear structure.</p>
+          <label for="writing-2">Response</label>
+          <textarea id="writing-2" rows="6" placeholder="Write your Task 2 response..."></textarea>
+          <div class="controls">
+            <button type="button" data-action="copy-writing" data-task="2">Copy Task 2</button>
+          </div>
+        </div>
+
+        <div class="task" data-writing-task="3">
+          <div class="task-head">
+            <h3>Task 3</h3>
+            <span class="status" id="word-writing-3">0 words</span>
+          </div>
+          <p class="hint">Write a comparison/analysis response with examples.</p>
+          <label for="writing-3">Response</label>
+          <textarea id="writing-3" rows="6" placeholder="Write your Task 3 response..."></textarea>
+          <div class="controls">
+            <button type="button" data-action="copy-writing" data-task="3">Copy Task 3</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="export-panel">
+        <div class="panel-header">
+          <h2>Export For Evaluation</h2>
+          <p>Copy all responses and paste into ChatGPT for CEFR/NCLC feedback.</p>
+        </div>
+        <div class="controls">
+          <button type="button" id="compile-all">Compile All</button>
+          <button type="button" id="copy-all">Copy All</button>
+        </div>
+        <label for="all-output">Combined Output</label>
+        <textarea id="all-output" rows="14" placeholder="Compiled responses appear here..."></textarea>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
