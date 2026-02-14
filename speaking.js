@@ -124,12 +124,6 @@ const task2QuestionBanks = {
 };
 task2QuestionBanks.all = [...task2QuestionBanks.february, ...task2QuestionBanks.january];
 
-const task2BankLabels = {
-  february: "February",
-  january: "January",
-  all: "All",
-};
-
 let task2ActiveBank = "february";
 let task2QuestionIndex = 0;
 const task3QuestionBank = [
@@ -192,6 +186,37 @@ const task3QuestionBank = [
 ];
 let task3QuestionIndex = 0;
 
+function currentLang() {
+  const stored = localStorage.getItem("tcf_lang");
+  if (stored === "fr" || stored === "en") return stored;
+  return document.documentElement.lang.startsWith("fr") ? "fr" : "en";
+}
+
+function uiText(key) {
+  const lang = currentLang();
+  const dict = {
+    en: {
+      question: "Question",
+      bank: "Bank",
+      february: "February",
+      january: "January",
+      all: "All",
+      reveal: "Reveal Question Text",
+      hide: "Hide Question Text",
+    },
+    fr: {
+      question: "Question",
+      bank: "Banque",
+      february: "Février",
+      january: "Janvier",
+      all: "Toutes",
+      reveal: "Afficher le texte de la question",
+      hide: "Masquer le texte de la question",
+    },
+  };
+  return dict[lang][key] || dict.en[key] || key;
+}
+
 function getRecognitionLanguage() {
   return sttLanguageSelect?.value || "fr-FR";
 }
@@ -233,8 +258,8 @@ function setTask2Question(index) {
   const prompt = activeBank[task2QuestionIndex];
   speakingPrompts[2] = prompt;
   promptElements[2].textContent = prompt;
-  task2QuestionMeta.textContent = `Question ${task2QuestionIndex + 1}/${total}`;
-  task2BankMeta.textContent = `Bank: ${task2BankLabels[task2ActiveBank]}`;
+  task2QuestionMeta.textContent = `${uiText("question")} ${task2QuestionIndex + 1}/${total}`;
+  task2BankMeta.textContent = `${uiText("bank")}: ${uiText(task2ActiveBank)}`;
 }
 
 function nextTask2Question() {
@@ -267,7 +292,7 @@ function setTask3Question(index) {
   const prompt = task3QuestionBank[task3QuestionIndex];
   speakingPrompts[3] = prompt;
   promptElements[3].textContent = prompt;
-  task3QuestionMeta.textContent = `Question ${task3QuestionIndex + 1}/${total}`;
+  task3QuestionMeta.textContent = `${uiText("question")} ${task3QuestionIndex + 1}/${total}`;
 }
 
 function nextTask3Question() {
@@ -658,7 +683,7 @@ function bindButtons() {
         const block = promptBlocks[task];
         if (!block) return;
         const nowHidden = block.classList.toggle("hidden");
-        button.textContent = nowHidden ? "Reveal Question Text" : "Hide Question Text";
+        button.textContent = nowHidden ? uiText("reveal") : uiText("hide");
       }
       if (action === "play-prompt" && task) playPrompt(task);
       if (action === "start-rec" && task) startRecognition(task);
@@ -675,6 +700,16 @@ function init() {
   setTask2Question(0);
   setTask3Question(0);
   bindButtons();
+  document.addEventListener("tcf:langchange", () => {
+    setTask2Question(task2QuestionIndex);
+    setTask3Question(task3QuestionIndex);
+    document.querySelectorAll("button[data-action='toggle-prompt']").forEach((button) => {
+      const task = Number(button.dataset.task);
+      const block = promptBlocks[task];
+      const isHidden = block ? block.classList.contains("hidden") : true;
+      button.textContent = isHidden ? uiText("reveal") : uiText("hide");
+    });
+  });
 
   if (!SpeechRecognition && !window.MediaRecorder) {
     speakingStatus[2].textContent = "Transcription unsupported in this browser";

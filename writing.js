@@ -56,6 +56,21 @@ const task3Questions = [
   "Faut-il mettre une photo sur son CV ?\n\nDocument 1:\nDe nos jours, certains candidats choisissent de mettre une photo sur leur CV, alors que d'autres preferent ne pas en mettre. Il faudrait interdire cette pratique pour eviter toute forme de discrimination ou d'injustice. Selon une etude menee par des specialistes du recrutement, la photo n'a pas de reelle utilite. Les resultats indiquent que les employeurs accordent plus d'attention a l'experience professionnelle (32 %) et aux diplomes (15 %) qu'a un physique. Seuls 2 % des recruteurs commencent par regarder la photo. Cette donnee est surprenante, compte tenu de l'importance donnee a l'apparence par certaines personnes.\n\nDocument 2:\nL'utilisation d'une photo sur le CV est un sujet qui divise les recruteurs. Certains estiment que la photo aide a se faire une idee du candidat avant la rencontre. Elle peut egalement faciliter la memorisation d'un candidat quand beaucoup de CV sont recus. D'autres pensent que tout depend du metier : pour les postes lies a l'accueil, par exemple, la photo peut etre appropriee. Cependant, elle doit toujours etre professionnelle pour creer une impression positive.",
 ];
 
+function currentLang() {
+  const stored = localStorage.getItem("tcf_lang");
+  if (stored === "fr" || stored === "en") return stored;
+  return document.documentElement.lang.startsWith("fr") ? "fr" : "en";
+}
+
+function uiText(key) {
+  const lang = currentLang();
+  const dict = {
+    en: { question: "Question", words: "words" },
+    fr: { question: "Question", words: "mots" },
+  };
+  return dict[lang][key] || dict.en[key] || key;
+}
+
 function formatSeconds(totalSeconds) {
   const mins = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
   const secs = String(totalSeconds % 60).padStart(2, "0");
@@ -97,14 +112,14 @@ function wordCount(text) {
 
 function updateWordCount(task) {
   const count = wordCount(writingFields[task].value);
-  writingWordStatus[task].textContent = `${count} words`;
+  writingWordStatus[task].textContent = `${count} ${uiText("words")}`;
 }
 
 function setTask1Question(index) {
   const total = task1Questions.length;
   task1QuestionIndex = ((index % total) + total) % total;
   task1QuestionText.textContent = task1Questions[task1QuestionIndex];
-  task1QuestionMeta.textContent = `Question ${task1QuestionIndex + 1}/${total}`;
+  task1QuestionMeta.textContent = `${uiText("question")} ${task1QuestionIndex + 1}/${total}`;
 }
 
 function nextTask1Question() {
@@ -128,7 +143,7 @@ function setTask2Question(index) {
   const total = task2Questions.length;
   task2QuestionIndex = ((index % total) + total) % total;
   task2QuestionText.textContent = task2Questions[task2QuestionIndex];
-  task2QuestionMeta.textContent = `Question ${task2QuestionIndex + 1}/${total}`;
+  task2QuestionMeta.textContent = `${uiText("question")} ${task2QuestionIndex + 1}/${total}`;
 }
 
 function nextTask2Question() {
@@ -152,7 +167,7 @@ function setTask3Question(index) {
   const total = task3Questions.length;
   task3QuestionIndex = ((index % total) + total) % total;
   task3QuestionText.textContent = task3Questions[task3QuestionIndex];
-  task3QuestionMeta.textContent = `Question ${task3QuestionIndex + 1}/${total}`;
+  task3QuestionMeta.textContent = `${uiText("question")} ${task3QuestionIndex + 1}/${total}`;
 }
 
 function nextTask3Question() {
@@ -265,6 +280,14 @@ function init() {
   setTask2Question(0);
   setTask3Question(0);
   updateTimerDisplay();
+  document.addEventListener("tcf:langchange", () => {
+    updateWordCount(1);
+    updateWordCount(2);
+    updateWordCount(3);
+    setTask1Question(task1QuestionIndex);
+    setTask2Question(task2QuestionIndex);
+    setTask3Question(task3QuestionIndex);
+  });
 }
 
 init();

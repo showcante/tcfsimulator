@@ -10,6 +10,7 @@
     <header class="topbar">
       <div class="nav-wrap">
         <a class="brand" href="/index.html" data-i18n="nav_brand"><img class="brand-logo" src="/Assets/drc_systems_top.png" alt="DRC Systems logo" />TCF Simulator</a>
+        <img class="nav-center-logo" src="/Assets/drc_systems_top.png" alt="DRC Systems logo" />
         <nav class="menu">
           <a href="/index.html" data-i18n="nav_home">Home</a>
           <div class="dropdown">
@@ -40,30 +41,30 @@
     <main class="layout">
       <section class="panel" id="writing-panel">
         <div class="panel-header">
-          <h2>Writing</h2>
-          <p>Three tasks with shared timer and word counters.</p>
+          <h2 data-i18n="writing_panel_title">Writing</h2>
+          <p data-i18n="writing_panel_lead">Three tasks with shared timer and word counters.</p>
         </div>
 
         <div class="exam-timer">
-          <strong>Total Time</strong>
+          <strong data-i18n="writing_total_time">Total Time</strong>
           <span id="timer-display">60:00</span>
           <div class="controls">
-            <button type="button" id="start-timer">Start</button>
-            <button type="button" id="pause-timer">Pause</button>
-            <button type="button" id="reset-timer">Reset</button>
+            <button type="button" id="start-timer" data-i18n="btn_start">Start</button>
+            <button type="button" id="pause-timer" data-i18n="btn_pause">Pause</button>
+            <button type="button" id="reset-timer" data-i18n="btn_reset">Reset</button>
           </div>
         </div>
 
         <div class="task" data-writing-task="1">
           <div class="task-head">
-            <h3>Task 1</h3>
+            <h3 data-i18n="task_label_1">Task 1</h3>
             <span class="status" id="word-writing-1">0 words</span>
           </div>
-          <p class="hint">Write a short practical message (email/note style).</p>
+          <p class="hint" data-i18n="writing_task1_hint">Write a short practical message (email/note style).</p>
           <div class="controls">
-            <button type="button" data-action="task1-prev">Previous Question</button>
-            <button type="button" data-action="task1-random">Random Question</button>
-            <button type="button" data-action="task1-next">Next Question</button>
+            <button type="button" data-action="task1-prev" data-i18n="btn_prev_question">Previous Question</button>
+            <button type="button" data-action="task1-random" data-i18n="btn_random_question">Random Question</button>
+            <button type="button" data-action="task1-next" data-i18n="btn_next_question">Next Question</button>
             <span class="status" id="task1-question-meta">Question 1/8</span>
           </div>
           <div class="prompt-text-block">
@@ -75,24 +76,24 @@
               (60 mots minimum/120 mots maximum)
             </p>
           </div>
-          <label for="writing-1">Response</label>
-          <textarea id="writing-1" rows="6" placeholder="Write your Task 1 response..."></textarea>
+          <label for="writing-1" data-i18n="label_response">Response</label>
+          <textarea id="writing-1" rows="6" placeholder="Write your Task 1 response..." data-i18n-placeholder="writing_task1_placeholder"></textarea>
           <div class="controls">
-            <button type="button" data-action="copy-writing" data-task="1">Copy Task 1</button>
-            <span class="copy-hint">After finishing this task, please click on the button and paste it to your favorite AI to evaluate your performance!</span>
+            <button type="button" data-action="copy-writing" data-task="1" data-i18n="btn_copy_task1">Copy Task 1</button>
+            <span class="copy-hint" data-i18n="writing_copy_hint">After finishing this task, please click on the button and paste it to your favorite AI to evaluate your performance!</span>
           </div>
         </div>
 
         <div class="task" data-writing-task="2">
           <div class="task-head">
-            <h3>Task 2</h3>
+            <h3 data-i18n="task_label_2">Task 2</h3>
             <span class="status" id="word-writing-2">0 words</span>
           </div>
-          <p class="hint">Write an argument/opinion text with clear structure.</p>
+          <p class="hint" data-i18n="writing_task2_hint">Write an argument/opinion text with clear structure.</p>
           <div class="controls">
-            <button type="button" data-action="task2-prev-writing">Previous Question</button>
-            <button type="button" data-action="task2-random-writing">Random Question</button>
-            <button type="button" data-action="task2-next-writing">Next Question</button>
+            <button type="button" data-action="task2-prev-writing" data-i18n="btn_prev_question">Previous Question</button>
+            <button type="button" data-action="task2-random-writing" data-i18n="btn_random_question">Random Question</button>
+            <button type="button" data-action="task2-next-writing" data-i18n="btn_next_question">Next Question</button>
             <span class="status" id="task2-question-meta-writing">Question 1/8</span>
           </div>
           <div class="prompt-text-block">
@@ -102,24 +103,24 @@
               (120 mots minimum/150 mots maximum)
             </p>
           </div>
-          <label for="writing-2">Response</label>
-          <textarea id="writing-2" rows="6" placeholder="Write your Task 2 response..."></textarea>
+          <label for="writing-2" data-i18n="label_response">Response</label>
+          <textarea id="writing-2" rows="6" placeholder="Write your Task 2 response..." data-i18n-placeholder="writing_task2_placeholder"></textarea>
           <div class="controls">
-            <button type="button" data-action="copy-writing" data-task="2">Copy Task 2</button>
-            <span class="copy-hint">After finishing this task, please click on the button and paste it to your favorite AI to evaluate your performance!</span>
+            <button type="button" data-action="copy-writing" data-task="2" data-i18n="btn_copy_task2">Copy Task 2</button>
+            <span class="copy-hint" data-i18n="writing_copy_hint">After finishing this task, please click on the button and paste it to your favorite AI to evaluate your performance!</span>
           </div>
         </div>
 
         <div class="task" data-writing-task="3">
           <div class="task-head">
-            <h3>Task 3</h3>
+            <h3 data-i18n="task_label_3">Task 3</h3>
             <span class="status" id="word-writing-3">0 words</span>
           </div>
-          <p class="hint">Write a comparison/analysis response with examples.</p>
+          <p class="hint" data-i18n="writing_task3_hint">Write a comparison/analysis response with examples.</p>
           <div class="controls">
-            <button type="button" data-action="task3-prev-writing">Previous Question</button>
-            <button type="button" data-action="task3-random-writing">Random Question</button>
-            <button type="button" data-action="task3-next-writing">Next Question</button>
+            <button type="button" data-action="task3-prev-writing" data-i18n="btn_prev_question">Previous Question</button>
+            <button type="button" data-action="task3-random-writing" data-i18n="btn_random_question">Random Question</button>
+            <button type="button" data-action="task3-next-writing" data-i18n="btn_next_question">Next Question</button>
             <span class="status" id="task3-question-meta-writing">Question 1/8</span>
           </div>
           <div class="prompt-text-block">
@@ -133,11 +134,11 @@
               À mon avis, cette mesure n’est pas appropriée. D’abord, la gratuité des transports représente un coût élevé pour les villes, et certaines, comme Toulouse, ont d’autres priorités, par exemple l’aménagement des espaces verts. Ensuite, il vaudrait mieux améliorer la desserte des transports publics plutôt que de les rendre gratuits, car certains quartiers en sont mal équipés. Enfin, garder les transports payants encourage les usagers à mieux respecter les installations, puisqu’ils financent leur fonctionnement.
             </p>
           </div>
-          <label for="writing-3">Response</label>
-          <textarea id="writing-3" rows="6" placeholder="Write your Task 3 response..."></textarea>
+          <label for="writing-3" data-i18n="label_response">Response</label>
+          <textarea id="writing-3" rows="6" placeholder="Write your Task 3 response..." data-i18n-placeholder="writing_task3_placeholder"></textarea>
           <div class="controls">
-            <button type="button" data-action="copy-writing" data-task="3">Copy Task 3</button>
-            <span class="copy-hint">After finishing this task, please click on the button and paste it to your favorite AI to evaluate your performance!</span>
+            <button type="button" data-action="copy-writing" data-task="3" data-i18n="btn_copy_task3">Copy Task 3</button>
+            <span class="copy-hint" data-i18n="writing_copy_hint">After finishing this task, please click on the button and paste it to your favorite AI to evaluate your performance!</span>
           </div>
         </div>
       </section>
@@ -146,7 +147,7 @@
     <footer class="site-footer">
       <div class="footer-wrap">
         <img class="footer-logo" src="/Assets/drc_systems_top.png" alt="DRC Systems logo" />
-        <span class="footer-copy">© 2026 DRC Systems. All rights reserved.</span>
+        <span class="footer-copy" data-i18n="footer_copy">© 2026 DRC Systems. All rights reserved.</span>
       </div>
     </footer>
 

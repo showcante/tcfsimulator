@@ -10,6 +10,7 @@
     <header class="topbar">
       <div class="nav-wrap">
         <a class="brand" href="/index.html" data-i18n="nav_brand"><img class="brand-logo" src="/Assets/drc_systems_top.png" alt="DRC Systems logo" />TCF Simulator</a>
+        <img class="nav-center-logo" src="/Assets/drc_systems_top.png" alt="DRC Systems logo" />
         <nav class="menu">
           <a href="/index.html" data-i18n="nav_home">Home</a>
           <div class="dropdown">
@@ -40,103 +41,103 @@
     <main class="layout">
       <section class="panel" id="speaking-panel">
         <div class="panel-header">
-          <h2>Speaking</h2>
-          <p>Task 2 and Task 3 oral prompts, replay, and live transcription.</p>
+          <h2 data-i18n="speaking_panel_title">Speaking</h2>
+          <p data-i18n="speaking_panel_lead">Task 2 and Task 3 oral prompts, replay, and live transcription.</p>
         </div>
-        <p class="warning-note">The recordings are limited to just 1 minute. Our developers are working to improve, stay tuned!</p>
+        <p class="warning-note" data-i18n="speaking_warning_note">The recordings are limited to just 1 minute. Our developers are working to improve, stay tuned!</p>
 
         <div class="task config-task">
           <div class="task-head">
-            <h3>Prompt Audio Settings</h3>
+            <h3 data-i18n="speaking_audio_settings">Prompt Audio Settings</h3>
           </div>
           <div class="controls">
-            <label for="tts-provider">TTS Provider</label>
+            <label for="tts-provider" data-i18n="label_tts_provider">TTS Provider</label>
             <select id="tts-provider">
-              <option value="gemini" selected>Gemini TTS (server)</option>
-              <option value="browser">Browser Voice (offline)</option>
+              <option value="gemini" selected data-i18n="opt_tts_gemini">Gemini TTS (server)</option>
+              <option value="browser" data-i18n="opt_tts_browser">Browser Voice (offline)</option>
             </select>
-            <label for="gemini-voice">Gemini Voice</label>
+            <label for="gemini-voice" data-i18n="label_gemini_voice">Gemini Voice</label>
             <select id="gemini-voice">
               <option value="Kore">Kore</option>
               <option value="Aoede">Aoede</option>
               <option value="Leda">Leda</option>
               <option value="Puck">Puck</option>
             </select>
-            <label for="stt-language">Transcription Language</label>
+            <label for="stt-language" data-i18n="label_transcription_lang">Transcription Language</label>
             <select id="stt-language">
-              <option value="fr-FR" selected>French (France)</option>
-              <option value="fr-CA">French (Canada)</option>
+              <option value="fr-FR" selected data-i18n="opt_lang_frfr">French (France)</option>
+              <option value="fr-CA" data-i18n="opt_lang_frca">French (Canada)</option>
             </select>
-            <label for="stt-provider">Transcription Engine</label>
+            <label for="stt-provider" data-i18n="label_transcription_engine">Transcription Engine</label>
             <select id="stt-provider">
-              <option value="server" selected>Server STT (Google)</option>
-              <option value="browser">Browser STT (Web Speech)</option>
+              <option value="server" selected data-i18n="opt_stt_server">Server STT (Google)</option>
+              <option value="browser" data-i18n="opt_stt_browser">Browser STT (Web Speech)</option>
             </select>
           </div>
-          <p class="hint">Use Gemini mode when running through local server with <code>GEMINI_API_KEY</code>.</p>
+          <p class="hint" data-i18n="speaking_hint_api">Use Gemini mode when running through local server with <code>GEMINI_API_KEY</code>.</p>
         </div>
 
         <div class="task" data-speaking-task="2">
           <div class="task-head">
-            <h3>Task 2</h3>
-            <span class="status" id="status-speaking-2">Idle</span>
+            <h3 data-i18n="task_label_2">Task 2</h3>
+            <span class="status" id="status-speaking-2" data-i18n="status_idle">Idle</span>
           </div>
-          <p class="hint">Prompt is read aloud. Use replay if needed.</p>
-          <p class="hint"><strong>This task lasts 3:30.</strong></p>
+          <p class="hint" data-i18n="speaking_hint_replay">Prompt is read aloud. Use replay if needed.</p>
+          <p class="hint"><strong data-i18n="speaking_task2_duration">This task lasts 3:30.</strong></p>
           <div class="controls">
-            <button type="button" data-action="task2-bank" data-bank="february">February</button>
-            <button type="button" data-action="task2-bank" data-bank="january">January</button>
-            <button type="button" data-action="task2-bank" data-bank="all">All</button>
+            <button type="button" data-action="task2-bank" data-bank="february" data-i18n="month_february">February</button>
+            <button type="button" data-action="task2-bank" data-bank="january" data-i18n="month_january">January</button>
+            <button type="button" data-action="task2-bank" data-bank="all" data-i18n="bank_all">All</button>
             <span class="status" id="task2-bank-meta">Bank: February</span>
           </div>
           <div class="controls">
-            <button type="button" data-action="task2-prev">Previous Question</button>
-            <button type="button" data-action="task2-random">Random Question</button>
-            <button type="button" data-action="task2-next">Next Question</button>
-            <button type="button" data-action="toggle-prompt" data-task="2">Reveal Question Text</button>
+            <button type="button" data-action="task2-prev" data-i18n="btn_prev_question">Previous Question</button>
+            <button type="button" data-action="task2-random" data-i18n="btn_random_question">Random Question</button>
+            <button type="button" data-action="task2-next" data-i18n="btn_next_question">Next Question</button>
+            <button type="button" data-action="toggle-prompt" data-task="2" data-i18n="btn_reveal_question">Reveal Question Text</button>
             <span class="status" id="task2-question-meta">Question 1/20</span>
           </div>
           <div id="prompt-block-2" class="prompt-text-block hidden">
             <p id="prompt-speaking-2">Prompt</p>
           </div>
           <div class="controls">
-            <button type="button" data-action="play-prompt" data-task="2">▶ Play Prompt</button>
-            <button type="button" data-action="start-rec" data-task="2">Start Recording</button>
-            <button type="button" data-action="stop-rec" data-task="2">Stop Recording</button>
-            <button type="button" data-action="copy-speaking" data-task="2">Copy Transcript</button>
-            <button type="button" data-action="copy-task2-eval">Copy Task 2 For Evaluation</button>
+            <button type="button" data-action="play-prompt" data-task="2" data-i18n="btn_play_prompt">▶ Play Prompt</button>
+            <button type="button" data-action="start-rec" data-task="2" data-i18n="btn_start_recording">Start Recording</button>
+            <button type="button" data-action="stop-rec" data-task="2" data-i18n="btn_stop_recording">Stop Recording</button>
+            <button type="button" data-action="copy-speaking" data-task="2" data-i18n="btn_copy_transcript">Copy Transcript</button>
+            <button type="button" data-action="copy-task2-eval" data-i18n="btn_copy_task2_eval">Copy Task 2 For Evaluation</button>
           </div>
           <audio id="prompt-audio-2" controls preload="none"></audio>
-          <label for="transcript-speaking-2">Transcript</label>
-          <textarea id="transcript-speaking-2" rows="6" placeholder="Your speaking transcript appears here..."></textarea>
+          <label for="transcript-speaking-2" data-i18n="label_transcript">Transcript</label>
+          <textarea id="transcript-speaking-2" rows="6" placeholder="Your speaking transcript appears here..." data-i18n-placeholder="speaking_transcript_placeholder"></textarea>
         </div>
 
         <div class="task" data-speaking-task="3">
           <div class="task-head">
-            <h3>Task 3</h3>
-            <span class="status" id="status-speaking-3">Idle</span>
+            <h3 data-i18n="task_label_3">Task 3</h3>
+            <span class="status" id="status-speaking-3" data-i18n="status_idle">Idle</span>
           </div>
-          <p class="hint">Prompt is read aloud. Use replay if needed.</p>
-          <p class="hint"><strong>This task lasts 4:30.</strong></p>
+          <p class="hint" data-i18n="speaking_hint_replay">Prompt is read aloud. Use replay if needed.</p>
+          <p class="hint"><strong data-i18n="speaking_task3_duration">This task lasts 4:30.</strong></p>
           <div class="controls">
-            <button type="button" data-action="task3-prev">Previous Question</button>
-            <button type="button" data-action="task3-random">Random Question</button>
-            <button type="button" data-action="task3-next">Next Question</button>
-            <button type="button" data-action="toggle-prompt" data-task="3">Reveal Question Text</button>
+            <button type="button" data-action="task3-prev" data-i18n="btn_prev_question">Previous Question</button>
+            <button type="button" data-action="task3-random" data-i18n="btn_random_question">Random Question</button>
+            <button type="button" data-action="task3-next" data-i18n="btn_next_question">Next Question</button>
+            <button type="button" data-action="toggle-prompt" data-task="3" data-i18n="btn_reveal_question">Reveal Question Text</button>
             <span class="status" id="task3-question-meta">Question 1/49</span>
           </div>
           <div id="prompt-block-3" class="prompt-text-block hidden">
             <p id="prompt-speaking-3">Vous participez à un débat: "Le télétravail améliore-t-il la qualité de vie?" Donnez votre opinion avec des arguments et des exemples.</p>
           </div>
           <div class="controls">
-            <button type="button" data-action="play-prompt" data-task="3">▶ Play Prompt</button>
-            <button type="button" data-action="start-rec" data-task="3">Start Recording</button>
-            <button type="button" data-action="stop-rec" data-task="3">Stop Recording</button>
-            <button type="button" data-action="copy-speaking" data-task="3">Copy Transcript</button>
+            <button type="button" data-action="play-prompt" data-task="3" data-i18n="btn_play_prompt">▶ Play Prompt</button>
+            <button type="button" data-action="start-rec" data-task="3" data-i18n="btn_start_recording">Start Recording</button>
+            <button type="button" data-action="stop-rec" data-task="3" data-i18n="btn_stop_recording">Stop Recording</button>
+            <button type="button" data-action="copy-speaking" data-task="3" data-i18n="btn_copy_transcript">Copy Transcript</button>
           </div>
           <audio id="prompt-audio-3" controls preload="none"></audio>
-          <label for="transcript-speaking-3">Transcript</label>
-          <textarea id="transcript-speaking-3" rows="6" placeholder="Your speaking transcript appears here..."></textarea>
+          <label for="transcript-speaking-3" data-i18n="label_transcript">Transcript</label>
+          <textarea id="transcript-speaking-3" rows="6" placeholder="Your speaking transcript appears here..." data-i18n-placeholder="speaking_transcript_placeholder"></textarea>
         </div>
       </section>
     </main>
@@ -144,7 +145,7 @@
     <footer class="site-footer">
       <div class="footer-wrap">
         <img class="footer-logo" src="/Assets/drc_systems_top.png" alt="DRC Systems logo" />
-        <span class="footer-copy">© 2026 DRC Systems. All rights reserved.</span>
+        <span class="footer-copy" data-i18n="footer_copy">© 2026 DRC Systems. All rights reserved.</span>
       </div>
     </footer>
 

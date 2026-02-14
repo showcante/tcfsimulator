@@ -42,6 +42,7 @@ const storedLang = localStorage.getItem('tcf_lang') || 'en';
 if (window.applyTranslations) {
   window.applyTranslations(storedLang);
 }
+document.dispatchEvent(new CustomEvent('tcf:langchange', { detail: { lang: storedLang } }));
 
 document.querySelectorAll('[data-lang-option]').forEach((option) => {
   option.addEventListener('click', () => {
@@ -50,6 +51,7 @@ document.querySelectorAll('[data-lang-option]').forEach((option) => {
     if (window.applyTranslations) {
       window.applyTranslations(lang);
     }
+    document.dispatchEvent(new CustomEvent('tcf:langchange', { detail: { lang } }));
     document.querySelectorAll('.lang-toggle').forEach((button) => {
       button.setAttribute('aria-expanded', 'false');
     });

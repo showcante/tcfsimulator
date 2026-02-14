@@ -37,6 +37,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: relative;
 }
 
 .brand {
@@ -50,6 +51,16 @@ body {
 
 .brand-logo {
   height: 30px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.nav-center-logo {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 34px;
   width: auto;
   object-fit: contain;
   display: block;
@@ -182,7 +193,9 @@ body:not(.lang-fr) .lang-label::after {
 }
 
 .home-hero-copy {
-  background: rgba(255, 255, 255, 0.92);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.9)),
+    url("/Assets/tcf_drc.png") center / contain no-repeat;
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 1.2rem;
@@ -401,6 +414,10 @@ textarea {
 }
 
 @media (max-width: 780px) {
+  .nav-center-logo {
+    display: none;
+  }
+
   .home-hero {
     grid-template-columns: 1fr;
     min-height: auto;
