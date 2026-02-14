@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TCF Simulator - Speaking</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="nav-wrap">
+        <a class="brand" href="/index.html" data-i18n="nav_brand">TCF Simulator</a>
+        <nav class="menu">
+          <a href="/index.html" data-i18n="nav_home">Home</a>
+          <div class="dropdown">
+            <button class="practice-toggle" type="button" data-target="practice-menu" aria-expanded="false" data-i18n="nav_practice">Practice Exam</button>
+            <div class="dropdown-menu" id="practice-menu">
+              <a href="/listening.html" data-i18n="nav_listening">Listening</a>
+              <a href="/reading.html" data-i18n="nav_reading">Reading</a>
+              <a href="/writing.html" data-i18n="nav_writing">Writing</a>
+              <a href="/speaking.html" data-i18n="nav_speaking">Speaking</a>
+            </div>
+          </div>
+          <div class="dropdown">
+            <button class="lang-toggle" type="button" data-target="lang-menu" aria-expanded="false"><span class="lang-label" data-i18n="lang_button">English 🇨🇦</span></button>
+            <div class="dropdown-menu lang-menu" id="lang-menu">
+              <button type="button" data-lang-option="en" data-i18n="lang_option_en">English 🇨🇦</button>
+              <button type="button" data-lang-option="fr" data-i18n="lang_option_fr">Français (Québec) ⚜️</button>
+            </div>
+          </div>
+        </nav>
+      </div>
+    </header>
+
+    <header class="hero">
+      <h1 data-i18n="speaking_page_title">Speaking Practice</h1>
+      <p data-i18n="speaking_page_lead">Task 2 and Task 3 oral prompt practice with Gemini TTS and Google STT.</p>
+    </header>
+
+    <main class="layout">
+      <section class="panel" id="speaking-panel">
+        <div class="panel-header">
+          <h2>Speaking</h2>
+          <p>Task 2 and Task 3 oral prompts, replay, and live transcription.</p>
+        </div>
+
+        <div class="task config-task">
+          <div class="task-head">
+            <h3>Prompt Audio Settings</h3>
+          </div>
+          <div class="controls">
+            <label for="tts-provider">TTS Provider</label>
+            <select id="tts-provider">
+              <option value="gemini" selected>Gemini TTS (server)</option>
+              <option value="browser">Browser Voice (offline)</option>
+            </select>
+            <label for="gemini-voice">Gemini Voice</label>
+            <select id="gemini-voice">
+              <option value="Kore">Kore</option>
+              <option value="Aoede">Aoede</option>
+              <option value="Leda">Leda</option>
+              <option value="Puck">Puck</option>
+            </select>
+            <label for="stt-language">Transcription Language</label>
+            <select id="stt-language">
+              <option value="fr-FR" selected>French (France)</option>
+              <option value="fr-CA">French (Canada)</option>
+            </select>
+            <label for="stt-provider">Transcription Engine</label>
+            <select id="stt-provider">
+              <option value="server" selected>Server STT (Google)</option>
+              <option value="browser">Browser STT (Web Speech)</option>
+            </select>
+          </div>
+          <p class="hint">Use Gemini mode when running through local server with <code>GEMINI_API_KEY</code>.</p>
+        </div>
+
+        <div class="task" data-speaking-task="2">
+          <div class="task-head">
+            <h3>Task 2</h3>
+            <span class="status" id="status-speaking-2">Idle</span>
+          </div>
+          <p class="hint">Prompt is read aloud. Use replay if needed.</p>
+          <div class="controls">
+            <button type="button" data-action="task2-bank" data-bank="february">February</button>
+            <button type="button" data-action="task2-bank" data-bank="january">January</button>
+            <button type="button" data-action="task2-bank" data-bank="all">All</button>
+            <span class="status" id="task2-bank-meta">Bank: February</span>
+          </div>
+          <div class="controls">
+            <button type="button" data-action="task2-prev">Previous Question</button>
+            <button type="button" data-action="task2-random">Random Question</button>
+            <button type="button" data-action="task2-next">Next Question</button>
+            <button type="button" data-action="toggle-prompt" data-task="2">Reveal Question Text</button>
+            <span class="status" id="task2-question-meta">Question 1/20</span>
+          </div>
+          <div id="prompt-block-2" class="prompt-text-block hidden">
+            <p id="prompt-speaking-2">Prompt</p>
+          </div>
+          <div class="controls">
+            <button type="button" data-action="play-prompt" data-task="2">Play Prompt</button>
+            <button type="button" data-action="start-rec" data-task="2">Start Recording</button>
+            <button type="button" data-action="stop-rec" data-task="2">Stop Recording</button>
+            <button type="button" data-action="copy-speaking" data-task="2">Copy Transcript</button>
+            <button type="button" data-action="copy-task2-eval">Copy Task 2 For Evaluation</button>
+          </div>
+          <audio id="prompt-audio-2" controls preload="none"></audio>
+          <label for="transcript-speaking-2">Transcript</label>
+          <textarea id="transcript-speaking-2" rows="6" placeholder="Your speaking transcript appears here..."></textarea>
+        </div>
+
+        <div class="task" data-speaking-task="3">
+          <div class="task-head">
+            <h3>Task 3</h3>
+            <span class="status" id="status-speaking-3">Idle</span>
+          </div>
+          <p class="hint">Prompt is read aloud. Use replay if needed.</p>
+          <div class="controls">
+            <button type="button" data-action="toggle-prompt" data-task="3">Reveal Question Text</button>
+          </div>
+          <div id="prompt-block-3" class="prompt-text-block hidden">
+            <p id="prompt-speaking-3">Vous participez à un débat: "Le télétravail améliore-t-il la qualité de vie?" Donnez votre opinion avec des arguments et des exemples.</p>
+          </div>
+          <div class="controls">
+            <button type="button" data-action="play-prompt" data-task="3">Play Prompt</button>
+            <button type="button" data-action="start-rec" data-task="3">Start Recording</button>
+            <button type="button" data-action="stop-rec" data-task="3">Stop Recording</button>
+            <button type="button" data-action="copy-speaking" data-task="3">Copy Transcript</button>
+          </div>
+          <audio id="prompt-audio-3" controls preload="none"></audio>
+          <label for="transcript-speaking-3">Transcript</label>
+          <textarea id="transcript-speaking-3" rows="6" placeholder="Your speaking transcript appears here..."></textarea>
+        </div>
+      </section>
+    </main>
+
+    <script src="i18n.js"></script>
+    <script src="main.js"></script>
+    <script src="speaking.js"></script>
+  </body>
+</html>

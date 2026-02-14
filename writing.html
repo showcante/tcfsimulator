@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TCF Simulator - Writing</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="nav-wrap">
+        <a class="brand" href="/index.html" data-i18n="nav_brand">TCF Simulator</a>
+        <nav class="menu">
+          <a href="/index.html" data-i18n="nav_home">Home</a>
+          <div class="dropdown">
+            <button class="practice-toggle" type="button" data-target="practice-menu" aria-expanded="false" data-i18n="nav_practice">Practice Exam</button>
+            <div class="dropdown-menu" id="practice-menu">
+              <a href="/listening.html" data-i18n="nav_listening">Listening</a>
+              <a href="/reading.html" data-i18n="nav_reading">Reading</a>
+              <a href="/writing.html" data-i18n="nav_writing">Writing</a>
+              <a href="/speaking.html" data-i18n="nav_speaking">Speaking</a>
+            </div>
+          </div>
+          <div class="dropdown">
+            <button class="lang-toggle" type="button" data-target="lang-menu" aria-expanded="false"><span class="lang-label" data-i18n="lang_button">English 🇨🇦</span></button>
+            <div class="dropdown-menu lang-menu" id="lang-menu">
+              <button type="button" data-lang-option="en" data-i18n="lang_option_en">English 🇨🇦</button>
+              <button type="button" data-lang-option="fr" data-i18n="lang_option_fr">Français (Québec) ⚜️</button>
+            </div>
+          </div>
+        </nav>
+      </div>
+    </header>
+
+    <header class="hero">
+      <h1 data-i18n="writing_page_title">Writing Practice</h1>
+      <p data-i18n="writing_page_lead">Simulate the 3 writing tasks with timer and word counter.</p>
+    </header>
+
+    <main class="layout">
+      <section class="panel" id="writing-panel">
+        <div class="panel-header">
+          <h2>Writing</h2>
+          <p>Three tasks with shared timer and word counters.</p>
+        </div>
+
+        <div class="exam-timer">
+          <strong>Total Time</strong>
+          <span id="timer-display">60:00</span>
+          <div class="controls">
+            <button type="button" id="start-timer">Start</button>
+            <button type="button" id="pause-timer">Pause</button>
+            <button type="button" id="reset-timer">Reset</button>
+          </div>
+        </div>
+
+        <div class="task" data-writing-task="1">
+          <div class="task-head">
+            <h3>Task 1</h3>
+            <span class="status" id="word-writing-1">0 words</span>
+          </div>
+          <p class="hint">Write a short practical message (email/note style).</p>
+          <label for="writing-1">Response</label>
+          <textarea id="writing-1" rows="6" placeholder="Write your Task 1 response..."></textarea>
+          <div class="controls">
+            <button type="button" data-action="copy-writing" data-task="1">Copy Task 1</button>
+          </div>
+        </div>
+
+        <div class="task" data-writing-task="2">
+          <div class="task-head">
+            <h3>Task 2</h3>
+            <span class="status" id="word-writing-2">0 words</span>
+          </div>
+          <p class="hint">Write an argument/opinion text with clear structure.</p>
+          <label for="writing-2">Response</label>
+          <textarea id="writing-2" rows="6" placeholder="Write your Task 2 response..."></textarea>
+          <div class="controls">
+            <button type="button" data-action="copy-writing" data-task="2">Copy Task 2</button>
+          </div>
+        </div>
+
+        <div class="task" data-writing-task="3">
+          <div class="task-head">
+            <h3>Task 3</h3>
+            <span class="status" id="word-writing-3">0 words</span>
+          </div>
+          <p class="hint">Write a comparison/analysis response with examples.</p>
+          <label for="writing-3">Response</label>
+          <textarea id="writing-3" rows="6" placeholder="Write your Task 3 response..."></textarea>
+          <div class="controls">
+            <button type="button" data-action="copy-writing" data-task="3">Copy Task 3</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="i18n.js"></script>
+    <script src="main.js"></script>
+    <script src="writing.js"></script>
+  </body>
+</html>

@@ -1,53 +1,40 @@
-# TCF Canada Practice Simulator (MVP)
+# TCF Canada Simulator
 
-This app simulates TCF speaking and writing practice.
+Multi-page web app for TCF Canada practice.
 
-## Features
-- Speaking Task 2 and Task 3 with replayable oral prompt
-- Task 2 includes a 20-question bank with `Previous`, `Random`, `Next`
-- Prompt audio from:
-  - Browser TTS (offline fallback)
-  - Gemini TTS (server proxy)
-- Speech transcription from:
-  - Server STT (Google, recommended for Edge/Opera)
-  - Browser STT (Web Speech fallback)
-- Writing section with 3 tasks
-- Shared exam timer (default 60:00)
-- Live word counter per writing task
-- Copy per-task response and copy-all export
+## Pages
+- `/index.html`: Home page with TCF overview, expandable exam sections, and document download links
+- `/speaking.html`: Speaking simulator (Task 2/3, Gemini TTS, Google STT, question banks)
+- `/writing.html`: Writing simulator (3 tasks, timer, word counters)
+- `/listening.html`: Curated external listening practice links
+- `/reading.html`: Curated external reading practice links
 
-## Run with Gemini TTS
+## Run
 1. Create local env file:
    ```bash
    cp /Users/user/Library/CloudStorage/OneDrive-Personnel/Study/TCF_app/.env.local.example /Users/user/Library/CloudStorage/OneDrive-Personnel/Study/TCF_app/.env.local
    ```
 2. Edit `/Users/user/Library/CloudStorage/OneDrive-Personnel/Study/TCF_app/.env.local` and set:
    ```bash
-   GEMINI_API_KEY="your_new_key_here"
-   GOOGLE_STT_API_KEY="your_google_cloud_speech_key_here"
+   GEMINI_API_KEY="your_google_ai_studio_key"
+   GOOGLE_STT_API_KEY="your_google_cloud_speech_key"
    ```
-   Use a **Google AI Studio Gemini API key** (typically starts with `AIza`). A Vertex/service-account-bound key will fail on this endpoint.
 3. Start server:
    ```bash
    node /Users/user/Library/CloudStorage/OneDrive-Personnel/Study/TCF_app/server.js
    ```
 4. Open:
    [http://localhost:3000](http://localhost:3000)
-5. In **Prompt Audio Settings**, select `Gemini TTS (server)`.
 
-## Run without Gemini (browser voice only)
-Open `/Users/user/Library/CloudStorage/OneDrive-Personnel/Study/TCF_app/index.html` directly in browser and keep `Browser Voice` selected.
+## UI Notes
+- Top-right language switcher:
+  - English 🇨🇦
+  - Français (Québec) ⚜️
+- Home hero uses `Assets/bear_tcf.mp4` without visible player controls.
+- Global site background uses `Assets/bear.png`.
+- `.mp4` files are ignored by git via `.gitignore`.
 
-## Notes
-- Gemini key stays server-side (not exposed in browser code).
-- Google STT key stays server-side and is used for `/api/transcribe`.
-- `.env.local` is auto-loaded by `server.js` and ignored by git.
-- If you ever accidentally track `.env.local`, run: `git rm --cached .env.local` then commit.
-- For better transcription reliability across browsers, use `Transcription Engine = Server STT (Google)`.
-- Data is local-only for now (no backend persistence).
-
-## Suggested next steps
-1. Add real TCF-style prompt bank and randomization.
-2. Save attempt history (localStorage or Supabase).
-3. Add one-click CEFR/NCLC scoring prompt templates.
-4. Add strict per-task speaking timers and auto-stop behavior.
+## API Notes
+- `GEMINI_API_KEY` is used for TTS prompt generation.
+- `GOOGLE_STT_API_KEY` is used for server-side speech transcription.
+- Keep `.env.local` private; it is ignored by git.

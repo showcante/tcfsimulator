@@ -3,181 +3,197 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TCF Canada Simulator</title>
+    <title>TCF Simulator - Home</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="hero">
-      <h1>TCF Canada Practice Simulator</h1>
-      <p>Speaking and writing practice with timing, transcription, and export.</p>
+    <header class="topbar">
+      <div class="nav-wrap">
+        <a class="brand" href="/index.html" data-i18n="nav_brand">TCF Simulator</a>
+        <nav class="menu">
+          <a href="/index.html" data-i18n="nav_home">Home</a>
+          <div class="dropdown">
+            <button class="practice-toggle" type="button" data-target="practice-menu" aria-expanded="false" data-i18n="nav_practice">Practice Exam</button>
+            <div class="dropdown-menu" id="practice-menu">
+              <a href="/listening.html" data-i18n="nav_listening">Listening</a>
+              <a href="/reading.html" data-i18n="nav_reading">Reading</a>
+              <a href="/writing.html" data-i18n="nav_writing">Writing</a>
+              <a href="/speaking.html" data-i18n="nav_speaking">Speaking</a>
+            </div>
+          </div>
+          <div class="dropdown">
+            <button class="lang-toggle" type="button" data-target="lang-menu" aria-expanded="false">
+              <span class="lang-label" data-i18n="lang_button">English 🇨🇦</span>
+            </button>
+            <div class="dropdown-menu lang-menu" id="lang-menu">
+              <button type="button" data-lang-option="en" data-i18n="lang_option_en">English 🇨🇦</button>
+              <button type="button" data-lang-option="fr" data-i18n="lang_option_fr">Français (Québec) ⚜️</button>
+            </div>
+          </div>
+        </nav>
+      </div>
     </header>
 
     <main class="layout">
-      <section class="panel" id="speaking-panel">
-        <div class="panel-header">
-          <h2>Speaking</h2>
-          <p>Task 2 and Task 3 oral prompts, replay, and live transcription.</p>
+      <section class="home-hero flat">
+        <h1 class="home-title-overlay" data-i18n="home_title">Prepare for the TCF Canada Exam</h1>
+        <div class="home-hero-copy aligned">
+          <p class="eyebrow" data-i18n="home_eyebrow">TCF Canada Preparation</p>
+          <p data-i18n="home_lead">
+            Train speaking, writing, reading, and listening in one place with a full simulation approach that mirrors
+            real exam pressure. Switch between monthly question banks, replay oral prompts, and capture your spoken
+            answers with transcription tools to review pronunciation, fluency, and structure. Build better habits with
+            timed writing tasks, copy-ready evaluation prompts, and targeted external resources so each practice session
+            gives you clear progress toward a stronger CEFR and NCLC performance.
+          </p>
         </div>
-
-        <div class="task config-task">
-          <div class="task-head">
-            <h3>Prompt Audio Settings</h3>
-          </div>
-          <div class="controls">
-            <label for="tts-provider">TTS Provider</label>
-            <select id="tts-provider">
-              <option value="gemini" selected>Gemini TTS (server)</option>
-              <option value="browser">Browser Voice (offline)</option>
-            </select>
-            <label for="gemini-voice">Gemini Voice</label>
-            <select id="gemini-voice">
-              <option value="Kore">Kore</option>
-              <option value="Aoede">Aoede</option>
-              <option value="Leda">Leda</option>
-              <option value="Puck">Puck</option>
-            </select>
-            <label for="stt-language">Transcription Language</label>
-            <select id="stt-language">
-              <option value="fr-FR" selected>French (France)</option>
-              <option value="fr-CA">French (Canada)</option>
-            </select>
-            <label for="stt-provider">Transcription Engine</label>
-            <select id="stt-provider">
-              <option value="server" selected>Server STT (Google)</option>
-              <option value="browser">Browser STT (Web Speech)</option>
-            </select>
-          </div>
-          <p class="hint">Use Gemini mode when running through local server with <code>GEMINI_API_KEY</code>.</p>
-        </div>
-
-        <div class="task" data-speaking-task="2">
-          <div class="task-head">
-            <h3>Task 2</h3>
-            <span class="status" id="status-speaking-2">Idle</span>
-          </div>
-          <p class="hint">Prompt is read aloud. Use replay if needed.</p>
-          <div class="controls">
-            <button type="button" data-action="task2-bank" data-bank="february">February</button>
-            <button type="button" data-action="task2-bank" data-bank="january">January</button>
-            <button type="button" data-action="task2-bank" data-bank="all">All</button>
-            <span class="status" id="task2-bank-meta">Bank: February</span>
-          </div>
-          <div class="controls">
-            <button type="button" data-action="task2-prev">Previous Question</button>
-            <button type="button" data-action="task2-random">Random Question</button>
-            <button type="button" data-action="task2-next">Next Question</button>
-            <button type="button" data-action="toggle-prompt" data-task="2">Reveal Question Text</button>
-            <span class="status" id="task2-question-meta">Question 1/20</span>
-          </div>
-          <div id="prompt-block-2" class="prompt-text-block hidden">
-            <p id="prompt-speaking-2">Vous appelez le service client d'une compagnie de transport pour signaler un retard et demander une solution. Expliquez la situation et proposez une option.</p>
-          </div>
-          <div class="controls">
-            <button type="button" data-action="play-prompt" data-task="2">Play Prompt</button>
-            <button type="button" data-action="start-rec" data-task="2">Start Recording</button>
-            <button type="button" data-action="stop-rec" data-task="2">Stop Recording</button>
-            <button type="button" data-action="copy-speaking" data-task="2">Copy Transcript</button>
-            <button type="button" data-action="copy-task2-eval">Copy Task 2 For Evaluation</button>
-          </div>
-          <audio id="prompt-audio-2" controls preload="none"></audio>
-          <label for="transcript-speaking-2">Transcript</label>
-          <textarea id="transcript-speaking-2" rows="6" placeholder="Your speaking transcript appears here..."></textarea>
-        </div>
-
-        <div class="task" data-speaking-task="3">
-          <div class="task-head">
-            <h3>Task 3</h3>
-            <span class="status" id="status-speaking-3">Idle</span>
-          </div>
-          <p class="hint">Prompt is read aloud. Use replay if needed.</p>
-          <div class="controls">
-            <button type="button" data-action="toggle-prompt" data-task="3">Reveal Question Text</button>
-          </div>
-          <div id="prompt-block-3" class="prompt-text-block hidden">
-            <p id="prompt-speaking-3">Vous participez à un débat: "Le télétravail améliore-t-il la qualité de vie?" Donnez votre opinion avec des arguments et des exemples.</p>
-          </div>
-          <div class="controls">
-            <button type="button" data-action="play-prompt" data-task="3">Play Prompt</button>
-            <button type="button" data-action="start-rec" data-task="3">Start Recording</button>
-            <button type="button" data-action="stop-rec" data-task="3">Stop Recording</button>
-            <button type="button" data-action="copy-speaking" data-task="3">Copy Transcript</button>
-          </div>
-          <audio id="prompt-audio-3" controls preload="none"></audio>
-          <label for="transcript-speaking-3">Transcript</label>
-          <textarea id="transcript-speaking-3" rows="6" placeholder="Your speaking transcript appears here..."></textarea>
+        <div class="home-hero-media large">
+          <video autoplay muted loop playsinline>
+            <source src="/Assets/bear_tcf.mp4" type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
         </div>
       </section>
 
-      <section class="panel" id="writing-panel">
+      <section class="panel">
         <div class="panel-header">
-          <h2>Writing</h2>
-          <p>Three tasks with shared timer and word counters.</p>
+          <h2 data-i18n="home_what_title">What Is TCF Canada?</h2>
+        </div>
+        <p data-i18n="home_what_body">
+          TCF Canada is a French-language proficiency test recognized by Canadian authorities for economic immigration and
+          citizenship applications. It evaluates your level from A1 to C2 based on the CEFR framework.
+        </p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2 data-i18n="home_exam_title">Exam Structure (Click To Expand)</h2>
         </div>
 
-        <div class="exam-timer">
-          <strong>Total Time</strong>
-          <span id="timer-display">60:00</span>
-          <div class="controls">
-            <button type="button" id="start-timer">Start</button>
-            <button type="button" id="pause-timer">Pause</button>
-            <button type="button" id="reset-timer">Reset</button>
+        <details class="accordion-item">
+          <summary data-i18n="acc_listening_title">Listening comprehension</summary>
+          <div class="accordion-body">
+            <p>These questions test the ability to understand spoken French, such as:</p>
+            <ul class="plain-list">
+              <li>colloquial words and common expressions in everyday situations involving communication (conversations, interviews, phone calls, etc.);</li>
+              <li>the main information in messages and simple, clear announcements;</li>
+              <li>information on people, facts or events in radio or television broadcasts on current events or on personal and professional subjects;</li>
+              <li>presentations on tangible or abstract subjects;</li>
+              <li>any type of discourse given at an ordinary pace of delivery.</li>
+            </ul>
+            <p>
+              Cette épreuve est constituée de questions à choix multiples (QCM). Pour chaque question, il y a 4 choix de réponse
+              (A, B, C, D) mais une seule réponse est exacte.
+            </p>
+            <p>Les épreuves se présentent selon un principe de difficulté progressive.</p>
+            <p>
+              ATTENTION : Chaque enregistrement n’est diffusé qu’une seule fois. La question est posée après l’écoute du document sonore.
+            </p>
           </div>
-        </div>
+        </details>
 
-        <div class="task" data-writing-task="1">
-          <div class="task-head">
-            <h3>Task 1</h3>
-            <span class="status" id="word-writing-1">0 words</span>
+        <details class="accordion-item">
+          <summary data-i18n="acc_reading_title">Reading comprehension</summary>
+          <div class="accordion-body">
+            <p>Ces questions testent les capacités à comprendre le français écrit, comme, par exemple :</p>
+            <ul class="plain-list">
+              <li>colloquial nouns, very simple words and phrases used in situations involving communication (formal or informal messages and correspondence);</li>
+              <li>information in common documents (classified adverts, brochures, menus and times, etc.);</li>
+              <li>information on people, facts or events (personal correspondence);</li>
+              <li>texts in informal language concerning everyday or work life;</li>
+              <li>articles and reports in which the authors take a stance on specific or abstract subjects;</li>
+              <li>long and complex factual or literary texts, specialist articles;</li>
+              <li>abstract or complex texts or extracts from books, specialist articles.</li>
+            </ul>
+            <p>
+              Cette épreuve est constituée de questions à choix multiples (QCM). Pour chaque question, il y a 4 choix de réponse
+              (A, B, C, D) mais une seule réponse est exacte.
+            </p>
+            <p>Les épreuves se présentent selon un principe de difficulté progressive.</p>
           </div>
-          <p class="hint">Write a short practical message (email/note style).</p>
-          <label for="writing-1">Response</label>
-          <textarea id="writing-1" rows="6" placeholder="Write your Task 1 response..."></textarea>
-          <div class="controls">
-            <button type="button" data-action="copy-writing" data-task="1">Copy Task 1</button>
-          </div>
-        </div>
+        </details>
 
-        <div class="task" data-writing-task="2">
-          <div class="task-head">
-            <h3>Task 2</h3>
-            <span class="status" id="word-writing-2">0 words</span>
+        <details class="accordion-item">
+          <summary data-i18n="acc_speaking_title">Speaking skills</summary>
+          <div class="accordion-body">
+            <p>This test evaluates the candidate’s ability to express themselves verbally in French and is made up of 3 tasks:</p>
+            <ul class="plain-list">
+              <li><strong>Task 1 – Structured interview</strong> no preparation (2 minutes): the candidate should demonstrate their ability to converse with a person they do not know (the assessor).</li>
+              <li><strong>Task 2 – Exercise in interaction</strong> with preparation (5.5 minutes, 2 of which are spent preparing): the candidate should demonstrate their ability to obtain information in a common everyday situation. The positions of the interlocutor and candidate will be outlined in the instructions.</li>
+              <li><strong>Task 3 – Expressing a point of view</strong> no preparation (4.5 minutes): the candidate should demonstrate their ability to speak spontaneously, continuously and in a convincing manner when responding to a question chosen by the assessor.</li>
+            </ul>
+            <p>In this test, the candidate is assessed on their ability to:</p>
+            <ul class="plain-list">
+              <li>talk about themselves and their family and professional life;</li>
+              <li>ask questions suited to the given context for communication;</li>
+              <li>give their opinion and explain the advantages and disadvantages of a plan, express agreement and disagreement;</li>
+              <li>present a clear and structured line of argument in a style appropriate to the context;</li>
+              <li>present complex subjects in a detailed and structured manner, develop these further and give a conclusion.</li>
+            </ul>
           </div>
-          <p class="hint">Write an argument/opinion text with clear structure.</p>
-          <label for="writing-2">Response</label>
-          <textarea id="writing-2" rows="6" placeholder="Write your Task 2 response..."></textarea>
-          <div class="controls">
-            <button type="button" data-action="copy-writing" data-task="2">Copy Task 2</button>
-          </div>
-        </div>
+        </details>
 
-        <div class="task" data-writing-task="3">
-          <div class="task-head">
-            <h3>Task 3</h3>
-            <span class="status" id="word-writing-3">0 words</span>
+        <details class="accordion-item">
+          <summary data-i18n="acc_writing_title">Writing skills</summary>
+          <div class="accordion-body">
+            <p>This test evaluates the candidate’s ability to express themselves in written French and is made up of 3 tasks:</p>
+            <ul class="plain-list">
+              <li><strong>Task 1:</strong> writing a message to describe, tell and/or explain something, addressed to one or several recipients who are specified in the instructions. Number of words expected: minimum of 60 words/maximum of 120 words.</li>
+              <li><strong>Task 2:</strong> writing an article, letter, note, etc., aimed at several recipients to give a report of an experience or tell a story. Reports and stories will be supported by comments, opinions and arguments, depending on the purpose (e.g. to make a claim, reconcile, etc.). Number of words expected: minimum of 120 words/maximum of 150 words.</li>
+              <li><strong>Task 3:</strong> writing a text (for a newspaper, website, colleague, superior at work, etc.) that compares 2 points of view on an event in society, expressed in two documents. The candidate gives their opinion on the subject addressed in the two documents. Number of words expected: minimum of 120 words/maximum of 180 words.</li>
+            </ul>
+            <p>In this test, the candidate is assessed on their ability to:</p>
+            <ul class="plain-list">
+              <li>communicate a message clearly;</li>
+              <li>provide the requested information;</li>
+              <li>describe, tell, explain;</li>
+              <li>justify a choice, position, decision, etc.;</li>
+              <li>link ideas and demonstrate coherence in their discourse;</li>
+              <li>compare two points of view;</li>
+              <li>express their opinion and defend it;</li>
+              <li>use vocabulary and structures suited to the given task;</li>
+              <li>rephrase an idea.</li>
+            </ul>
+            <p><strong>NB!</strong> The written skills paper may be marked as “A1 not achieved” if:</p>
+            <ul class="plain-list">
+              <li>the writing is not legible (in cases of writing on paper);</li>
+              <li>the completed tasks do not adhere to the word limits;</li>
+              <li>the writing is off-topic;</li>
+              <li>one or more tasks have not been completed.</li>
+            </ul>
           </div>
-          <p class="hint">Write a comparison/analysis response with examples.</p>
-          <label for="writing-3">Response</label>
-          <textarea id="writing-3" rows="6" placeholder="Write your Task 3 response..."></textarea>
-          <div class="controls">
-            <button type="button" data-action="copy-writing" data-task="3">Copy Task 3</button>
-          </div>
+        </details>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2 data-i18n="home_docs_title">Documents For Consultation</h2>
+        </div>
+        <div class="link-list">
+          <article class="resource-item">
+            <h3><a href="https://www.france-education-international.fr/en/document/manuel-candidat-tcf-en" target="_blank" rel="noopener noreferrer" data-i18n="home_docs_manual">TCF Candidate's Manual (Download)</a></h3>
+          </article>
+          <article class="resource-item">
+            <h3><a href="https://www.france-education-international.fr/en/document/presentationtcfcanada-en" target="_blank" rel="noopener noreferrer" data-i18n="home_docs_sheet">TCF Canada Presentation Sheet (Download)</a></h3>
+          </article>
         </div>
       </section>
 
-      <section class="panel" id="export-panel">
+      <section class="panel">
         <div class="panel-header">
-          <h2>Export For Evaluation</h2>
-          <p>Copy all responses and paste into ChatGPT for CEFR/NCLC feedback.</p>
+          <h2 data-i18n="home_key_title">Key Facts</h2>
         </div>
-        <div class="controls">
-          <button type="button" id="compile-all">Compile All</button>
-          <button type="button" id="copy-all">Copy All</button>
-        </div>
-        <label for="all-output">Combined Output</label>
-        <textarea id="all-output" rows="14" placeholder="Compiled responses appear here..."></textarea>
+        <ul class="plain-list">
+          <li data-i18n="home_key_1">Total duration is approximately 2 hours 47 minutes.</li>
+          <li data-i18n="home_key_2">All 4 modules are mandatory for TCF Canada.</li>
+          <li data-i18n="home_key_3">Results are generally issued to test centers within 15 working days.</li>
+          <li data-i18n="home_key_4">Certificates are valid for 2 years.</li>
+        </ul>
+        <p class="hint" data-i18n="home_key_hint">This summary follows the official TCF Canada structure published by France Education International.</p>
       </section>
     </main>
 
-    <script src="app.js"></script>
+    <script src="i18n.js"></script>
+    <script src="main.js"></script>
   </body>
 </html>

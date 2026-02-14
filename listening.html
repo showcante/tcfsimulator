@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TCF Simulator - Listening</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="nav-wrap">
+        <a class="brand" href="/index.html" data-i18n="nav_brand">TCF Simulator</a>
+        <nav class="menu">
+          <a href="/index.html" data-i18n="nav_home">Home</a>
+          <div class="dropdown">
+            <button class="practice-toggle" type="button" data-target="practice-menu" aria-expanded="false" data-i18n="nav_practice">Practice Exam</button>
+            <div class="dropdown-menu" id="practice-menu">
+              <a href="/listening.html" data-i18n="nav_listening">Listening</a>
+              <a href="/reading.html" data-i18n="nav_reading">Reading</a>
+              <a href="/writing.html" data-i18n="nav_writing">Writing</a>
+              <a href="/speaking.html" data-i18n="nav_speaking">Speaking</a>
+            </div>
+          </div>
+          <div class="dropdown">
+            <button class="lang-toggle" type="button" data-target="lang-menu" aria-expanded="false"><span class="lang-label" data-i18n="lang_button">English 🇨🇦</span></button>
+            <div class="dropdown-menu lang-menu" id="lang-menu">
+              <button type="button" data-lang-option="en" data-i18n="lang_option_en">English 🇨🇦</button>
+              <button type="button" data-lang-option="fr" data-i18n="lang_option_fr">Français (Québec) ⚜️</button>
+            </div>
+          </div>
+        </nav>
+      </div>
+    </header>
+
+    <header class="hero">
+      <h1 data-i18n="listen_page_title">Listening Practice Resources</h1>
+      <p data-i18n="listen_page_lead">Use these external resources to train for the TCF Canada listening module.</p>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <div class="link-list">
+          <article class="resource-item">
+            <h3><a href="https://www.freetcf.com/tests/listening" target="_blank" rel="noopener noreferrer">FreeTCF Listening Tests</a></h3>
+            <p>Practice-style listening sets with TCF-like multiple-choice format for timed training.</p>
+          </article>
+
+          <article class="resource-item">
+            <h3><a href="https://apprendre.tv5monde.com/en/tcf" target="_blank" rel="noopener noreferrer">TV5MONDE - TCF Preparation</a></h3>
+            <p>Structured learning activities for TCF preparation, including audio comprehension exercises at different levels.</p>
+          </article>
+
+          <article class="resource-item">
+            <h3><a href="https://francaisfacile.rfi.fr/fr/diplômes-tests/" target="_blank" rel="noopener noreferrer">RFI Français Facile - Diplômes & Tests</a></h3>
+            <p>French listening and language training content useful for exam listening reflexes and vocabulary building.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script src="i18n.js"></script>
+    <script src="main.js"></script>
+  </body>
+</html>

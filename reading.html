@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TCF Simulator - Reading</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="nav-wrap">
+        <a class="brand" href="/index.html" data-i18n="nav_brand">TCF Simulator</a>
+        <nav class="menu">
+          <a href="/index.html" data-i18n="nav_home">Home</a>
+          <div class="dropdown">
+            <button class="practice-toggle" type="button" data-target="practice-menu" aria-expanded="false" data-i18n="nav_practice">Practice Exam</button>
+            <div class="dropdown-menu" id="practice-menu">
+              <a href="/listening.html" data-i18n="nav_listening">Listening</a>
+              <a href="/reading.html" data-i18n="nav_reading">Reading</a>
+              <a href="/writing.html" data-i18n="nav_writing">Writing</a>
+              <a href="/speaking.html" data-i18n="nav_speaking">Speaking</a>
+            </div>
+          </div>
+          <div class="dropdown">
+            <button class="lang-toggle" type="button" data-target="lang-menu" aria-expanded="false"><span class="lang-label" data-i18n="lang_button">English 🇨🇦</span></button>
+            <div class="dropdown-menu lang-menu" id="lang-menu">
+              <button type="button" data-lang-option="en" data-i18n="lang_option_en">English 🇨🇦</button>
+              <button type="button" data-lang-option="fr" data-i18n="lang_option_fr">Français (Québec) ⚜️</button>
+            </div>
+          </div>
+        </nav>
+      </div>
+    </header>
+
+    <header class="hero">
+      <h1 data-i18n="read_page_title">Reading Practice Resources</h1>
+      <p data-i18n="read_page_lead">Train reading comprehension strategies and speed for TCF Canada.</p>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <div class="link-list">
+          <article class="resource-item">
+            <h3><a href="https://apprendre.tv5monde.com/en/tcf" target="_blank" rel="noopener noreferrer">TV5MONDE - TCF Preparation</a></h3>
+            <p>Use this page for TCF prep and click into reading comprehension activities to practice understanding short and long written texts.</p>
+          </article>
+
+          <article class="resource-item">
+            <h3><a href="https://www.freetcf.com/tests/reading" target="_blank" rel="noopener noreferrer">FreeTCF Reading Tests</a></h3>
+            <p>Practice-oriented reading tests in a TCF-like question style to improve time management and answer accuracy.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script src="i18n.js"></script>
+    <script src="main.js"></script>
+  </body>
+</html>
