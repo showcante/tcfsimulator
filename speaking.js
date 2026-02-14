@@ -29,6 +29,7 @@ const sttLanguageSelect = document.getElementById("stt-language");
 const sttProviderSelect = document.getElementById("stt-provider");
 const task2QuestionMeta = document.getElementById("task2-question-meta");
 const task2BankMeta = document.getElementById("task2-bank-meta");
+const task3QuestionMeta = document.getElementById("task3-question-meta");
 const promptBlocks = {
   2: document.getElementById("prompt-block-2"),
   3: document.getElementById("prompt-block-3"),
@@ -56,6 +57,18 @@ const mediaChunks = {
 const mediaStreams = {
   2: null,
   3: null,
+};
+const taskMaxDurationMs = {
+  2: 3.5 * 60 * 1000,
+  3: 4.5 * 60 * 1000,
+};
+const recordingTimeouts = {
+  2: null,
+  3: null,
+};
+const timedOutTask = {
+  2: false,
+  3: false,
 };
 
 const promptAudioUrls = {
@@ -119,6 +132,65 @@ const task2BankLabels = {
 
 let task2ActiveBank = "february";
 let task2QuestionIndex = 0;
+const task3QuestionBank = [
+  "Que pensez-vous des habitudes de consommation dans les pays riches ?",
+  "Tout le monde peut agir pour produire moins de dechets. Qu'en pensez-vous ?",
+  "La consommation d'objets comme les vetements et les telephones est-elle excessive ? Pourquoi ?",
+  "Il faut diminuer la circulation des voitures en ville. Etes-vous d'accord ?",
+  "Pour preserver la planete, les transports en commun devraient etre gratuits. Qu'en pensez-vous ?",
+  "Selon vous, doit-on proteger tous les animaux en voie de disparition ? Pourquoi ?",
+  "Quel est votre avis sur les actions prises dans votre pays pour diminuer la pollution ?",
+  "L'education a l'environnement devrait commencer tres tot chez les enfants. Qu'en pensez-vous ?",
+  "Selon vous, les prestations sociales reduisent-elles la solidarite entre les membres d'une famille ? Expliquez.",
+  "Est-il pratique de continuer a vivre avec ses parents apres l'age de 25 ans ? Qu'en pensez-vous ?",
+  "Selon vous, est-il preferable d'avoir une grande famille ou de vrais amis ? Expliquez.",
+  "Les personnes agees offrent souvent des conseils utiles. Qu'en pensez-vous ?",
+  "Selon certains, des personnes tres differentes ne peuvent pas garder une amitie durable. Etes-vous d'accord ?",
+  "Selon vous, est-ce simple de creer des amities lorsqu'on arrive dans un pays etranger ? Pourquoi ?",
+  "A votre avis, les enfants peuvent-ils aider a mieux s'integrer lorsqu'on arrive dans un pays etranger ? Expliquez pourquoi.",
+  "Peut-on considerer les membres de la famille comme nos meilleurs amis ? Expliquez pourquoi.",
+  "Aujourd'hui, beaucoup disent qu'on ne peut plus vivre sans la technologie. Quelle est votre opinion ?",
+  "Quels impacts et quels risques peuvent avoir l'usage regulier des telephones, des ordinateurs et des tablettes ?",
+  "Avec Internet, on recoit plus d'informations. Qu'en pensez-vous ?",
+  "Est-il important d'apprendre a utiliser les nouvelles technologies (Internet, reseaux sociaux, etc.) des l'enfance ? Pourquoi ?",
+  "Les parents devraient-ils permettre a leurs enfants d'etre sur les reseaux sociaux ? Etes-vous d'accord ?",
+  "Grace aux reseaux sociaux, il est plus facile de se faire des connaissances et des amities. Qu'en pensez-vous ?",
+  "Les outils digitaux aident a economiser du temps dans la vie de tous les jours. Partagez-vous cet avis ?",
+  "Peut-on vraiment tout acheter sur Internet ? Qu'en dites-vous ?",
+  "Est-il possible de se fier aux rendez-vous medicaux a distance ? Pourquoi ?",
+  "Est-il possible de se passer de medicaments aujourd'hui ? Pourquoi ?",
+  "Peut-on vivre sans utiliser de medicaments ? Partagez-vous cette opinion ?",
+  "La plupart des gens essaient-ils de paraitre plus jeunes que leur age ? Qu'en pensez-vous ?",
+  "Les jeux video constituent-ils un danger pour les joueurs ? Expliquez pourquoi.",
+  "Tous les etes, les magazines publient des recommandations pour perdre du poids. A votre avis, ces informations sont-elles efficaces et credibles ? Pourquoi ?",
+  "De plus en plus de gens choisissent de devenir vegetariens. Que pensez-vous de ce regime alimentaire ?",
+  "La vie en ville est-elle plus facile pour les personnes agees que la vie a la campagne ? Etes-vous d'accord ?",
+  "L'essentiel dans la vie est-il de trouver du bonheur au travail ? Qu'en pensez-vous ?",
+  "A l'avenir, grace aux nouvelles technologies, le travail ne sera plus necessaire. Qu'en pensez-vous ?",
+  "Les entreprises devraient-elles reduire le teletravail pour leurs salaries ? Pourquoi ?",
+  "Pourquoi les gens s'interessent-ils aux voyages en train, en avion ou en bus (selon le contexte local) ?",
+  "De quelle maniere les entreprises peuvent-elles faciliter l'integration des nouveaux employes ?",
+  "Pensez-vous que le fait de resider dans plusieurs pays puisse ameliorer les perspectives professionnelles ?",
+  "Le tourisme permet-il a un pays de se developper et de progresser economiquement ?",
+  "Le salaire est-il le facteur principal dans un emploi ? Etes-vous d'accord ?",
+  "Selon vous, est-il necessaire de suivre de longues etudes pour reussir dans la vie ?",
+  "Quelle etait votre matiere preferee a l'ecole ? Pour quelle raison ?",
+  "Quelles lecons ou matieres devraient avoir plus de place dans les programmes scolaires ? Pourquoi ?",
+  "Pensez-vous qu'Internet joue un role benefique dans l'education des enfants ?",
+  "Est-il necessaire d'avoir des diplomes pour reussir dans sa carriere professionnelle ? Justifiez votre reponse.",
+  "Il est possible de se remettre aux etudes ou de commencer des etudes a tout age. Qu'en pensez-vous ?",
+  "Faut-il toujours dire toute la verite aux enfants ? Donnez votre avis.",
+  "Pensez-vous que les etablissements scolaires devraient valoriser davantage les activites liees a l'art (musique, theatre, arts visuels, etc.) ? Pourquoi ?",
+  "Selon vous, les voyages sont-ils benefiques ? Pourquoi ?",
+  "De nombreuses personnes n'apprecient pas de voyager seules. Partagez-vous cette opinion ? Pourquoi ?",
+  "Quelles sont les raisons qui peuvent pousser une personne a s'engager dans une action humanitaire ?",
+  "Faut-il maitriser la langue du pays ou l'on reside ? Pourquoi ?",
+  "Selon vous, les livres ont-ils perdu leur utilite dans la societe actuelle ?",
+  "Les metiers lies a l'art (cinema, musique, peinture, etc.) ne sont pas vus comme de vrais emplois. Qu'en pensez-vous ?",
+  "Voyager a l'etranger peut transformer une personne. Qu'en pensez-vous ?",
+  "Pensez-vous qu'il soit simple de preserver sa culture d'origine en vivant a l'etranger ? Expliquez pourquoi.",
+];
+let task3QuestionIndex = 0;
 
 function getRecognitionLanguage() {
   return sttLanguageSelect?.value || "fr-FR";
@@ -126,6 +198,32 @@ function getRecognitionLanguage() {
 
 function isServerSttSelected() {
   return (sttProviderSelect?.value || "server") === "server";
+}
+
+function showTimeUp(task) {
+  speakingStatus[task].textContent = "Your time is up";
+  speakingStatus[task].classList.add("status-timeup");
+}
+
+function clearTimeUp(task) {
+  speakingStatus[task].classList.remove("status-timeup");
+}
+
+function clearRecordingTimeout(task) {
+  if (recordingTimeouts[task]) {
+    clearTimeout(recordingTimeouts[task]);
+    recordingTimeouts[task] = null;
+  }
+}
+
+function armRecordingTimeout(task) {
+  clearRecordingTimeout(task);
+  timedOutTask[task] = false;
+  recordingTimeouts[task] = setTimeout(() => {
+    timedOutTask[task] = true;
+    stopRecognition(task, true);
+    showTimeUp(task);
+  }, taskMaxDurationMs[task]);
 }
 
 function setTask2Question(index) {
@@ -161,6 +259,32 @@ function selectTask2Bank(bank) {
   if (!task2QuestionBanks[bank]) return;
   task2ActiveBank = bank;
   setTask2Question(0);
+}
+
+function setTask3Question(index) {
+  const total = task3QuestionBank.length;
+  task3QuestionIndex = ((index % total) + total) % total;
+  const prompt = task3QuestionBank[task3QuestionIndex];
+  speakingPrompts[3] = prompt;
+  promptElements[3].textContent = prompt;
+  task3QuestionMeta.textContent = `Question ${task3QuestionIndex + 1}/${total}`;
+}
+
+function nextTask3Question() {
+  setTask3Question(task3QuestionIndex + 1);
+}
+
+function previousTask3Question() {
+  setTask3Question(task3QuestionIndex - 1);
+}
+
+function randomTask3Question() {
+  if (task3QuestionBank.length < 2) return;
+  let nextIndex = task3QuestionIndex;
+  while (nextIndex === task3QuestionIndex) {
+    nextIndex = Math.floor(Math.random() * task3QuestionBank.length);
+  }
+  setTask3Question(nextIndex);
 }
 
 function playPromptWithBrowserVoice(task) {
@@ -238,6 +362,7 @@ function buildRecognizer(task) {
 
   recognizer.onstart = () => {
     activeRecognitionTask = task;
+    clearTimeUp(task);
     speakingStatus[task].textContent = "Listening";
   };
 
@@ -290,6 +415,7 @@ function buildRecognizer(task) {
   };
 
   recognizer.onend = () => {
+    clearRecordingTimeout(task);
     if (interimTranscript[task]) {
       transcriptFields[task].value = `${transcriptFields[task].value}${interimTranscript[task]} `.trim() + " ";
       interimTranscript[task] = "";
@@ -303,6 +429,10 @@ function buildRecognizer(task) {
     }
 
     if (activeRecognitionTask === task) activeRecognitionTask = null;
+    if (timedOutTask[task]) {
+      showTimeUp(task);
+      return;
+    }
     speakingStatus[task].textContent = "Idle";
   };
 
@@ -336,9 +466,17 @@ async function transcribeBlobWithServer(task, blob) {
   const text = (data.text || "").trim();
   if (text) {
     transcriptFields[task].value = `${transcriptFields[task].value}${text} `.trim() + " ";
-    speakingStatus[task].textContent = "Idle";
+    if (timedOutTask[task]) {
+      showTimeUp(task);
+    } else {
+      speakingStatus[task].textContent = "Idle";
+    }
   } else {
-    speakingStatus[task].textContent = "No speech recognized (try speaking longer, closer to mic)";
+    if (timedOutTask[task]) {
+      showTimeUp(task);
+    } else {
+      speakingStatus[task].textContent = "No speech recognized (try speaking longer, closer to mic)";
+    }
   }
 }
 
@@ -370,6 +508,7 @@ async function startServerTranscription(task) {
     const recorder = new MediaRecorder(stream, recorderOptions);
     mediaRecorders[task] = recorder;
     activeRecognitionTask = task;
+    clearTimeUp(task);
     speakingStatus[task].textContent = "Listening";
 
     recorder.ondataavailable = (event) => {
@@ -377,6 +516,7 @@ async function startServerTranscription(task) {
     };
 
     recorder.onstop = async () => {
+      clearRecordingTimeout(task);
       const chunkList = mediaChunks[task];
       mediaChunks[task] = [];
 
@@ -404,15 +544,17 @@ async function startServerTranscription(task) {
     };
 
     recorder.start(250);
+    armRecordingTimeout(task);
   } catch (_error) {
     speakingStatus[task].textContent = "Mic permission blocked";
   }
 }
 
-function stopServerTranscription(task) {
+function stopServerTranscription(task, fromTimeout = false) {
   const recorder = mediaRecorders[task];
   if (!recorder || recorder.state !== "recording") return;
-  speakingStatus[task].textContent = "Stopping...";
+  clearRecordingTimeout(task);
+  if (!fromTimeout) speakingStatus[task].textContent = "Stopping...";
   recorder.stop();
 }
 
@@ -429,6 +571,8 @@ function startRecognition(task) {
 
   noSpeechCount[task] = 0;
   interimTranscript[task] = "";
+  clearTimeUp(task);
+  armRecordingTimeout(task);
 
   if (activeRecognitionTask && activeRecognitionTask !== task) {
     stopRecognition(activeRecognitionTask);
@@ -448,12 +592,13 @@ function startRecognition(task) {
   }
 }
 
-function stopRecognition(task) {
+function stopRecognition(task, fromTimeout = false) {
   if (isServerSttSelected()) {
-    stopServerTranscription(task);
+    stopServerTranscription(task, fromTimeout);
     return;
   }
 
+  clearRecordingTimeout(task);
   noSpeechCount[task] = 0;
   if (interimTranscript[task]) {
     transcriptFields[task].value = `${transcriptFields[task].value}${interimTranscript[task]} `.trim() + " ";
@@ -506,6 +651,9 @@ function bindButtons() {
       if (action === "task2-random") randomTask2Question();
       if (action === "task2-next") nextTask2Question();
       if (action === "task2-bank" && button.dataset.bank) selectTask2Bank(button.dataset.bank);
+      if (action === "task3-prev") previousTask3Question();
+      if (action === "task3-random") randomTask3Question();
+      if (action === "task3-next") nextTask3Question();
       if (action === "toggle-prompt" && task) {
         const block = promptBlocks[task];
         if (!block) return;
@@ -525,6 +673,7 @@ function init() {
   ttsProviderSelect.value = "gemini";
   sttProviderSelect.value = "server";
   setTask2Question(0);
+  setTask3Question(0);
   bindButtons();
 
   if (!SpeechRecognition && !window.MediaRecorder) {

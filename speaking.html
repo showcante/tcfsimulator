@@ -81,6 +81,7 @@
             <span class="status" id="status-speaking-2">Idle</span>
           </div>
           <p class="hint">Prompt is read aloud. Use replay if needed.</p>
+          <p class="hint"><strong>This task lasts 3:30.</strong></p>
           <div class="controls">
             <button type="button" data-action="task2-bank" data-bank="february">February</button>
             <button type="button" data-action="task2-bank" data-bank="january">January</button>
@@ -98,7 +99,7 @@
             <p id="prompt-speaking-2">Prompt</p>
           </div>
           <div class="controls">
-            <button type="button" data-action="play-prompt" data-task="2">Play Prompt</button>
+            <button type="button" data-action="play-prompt" data-task="2">▶ Play Prompt</button>
             <button type="button" data-action="start-rec" data-task="2">Start Recording</button>
             <button type="button" data-action="stop-rec" data-task="2">Stop Recording</button>
             <button type="button" data-action="copy-speaking" data-task="2">Copy Transcript</button>
@@ -115,14 +116,19 @@
             <span class="status" id="status-speaking-3">Idle</span>
           </div>
           <p class="hint">Prompt is read aloud. Use replay if needed.</p>
+          <p class="hint"><strong>This task lasts 4:30.</strong></p>
           <div class="controls">
+            <button type="button" data-action="task3-prev">Previous Question</button>
+            <button type="button" data-action="task3-random">Random Question</button>
+            <button type="button" data-action="task3-next">Next Question</button>
             <button type="button" data-action="toggle-prompt" data-task="3">Reveal Question Text</button>
+            <span class="status" id="task3-question-meta">Question 1/49</span>
           </div>
           <div id="prompt-block-3" class="prompt-text-block hidden">
             <p id="prompt-speaking-3">Vous participez à un débat: "Le télétravail améliore-t-il la qualité de vie?" Donnez votre opinion avec des arguments et des exemples.</p>
           </div>
           <div class="controls">
-            <button type="button" data-action="play-prompt" data-task="3">Play Prompt</button>
+            <button type="button" data-action="play-prompt" data-task="3">▶ Play Prompt</button>
             <button type="button" data-action="start-rec" data-task="3">Start Recording</button>
             <button type="button" data-action="stop-rec" data-task="3">Stop Recording</button>
             <button type="button" data-action="copy-speaking" data-task="3">Copy Transcript</button>

@@ -321,11 +321,24 @@ body.lang-fr .home-hero-copy {
   background: var(--accent-weak);
 }
 
+.status-timeup {
+  background: #fee2e2 !important;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
 .controls {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   margin: 0.5rem 0;
+}
+
+.copy-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  align-self: center;
+  font-style: italic;
 }
 
 button {
@@ -410,6 +423,11 @@ audio {
   padding: 0.6rem;
   margin: 0.4rem 0 0.6rem;
   background: #fcfefe;
+}
+
+.writing-question-text {
+  margin: 0;
+  white-space: pre-line;
 }
 
 .hidden {
