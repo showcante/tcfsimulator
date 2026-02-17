@@ -169,7 +169,7 @@ async def task2_live(ws: WebSocket) -> None:
         greeting_prompt = "Commence l'interaction TCF tâche 2 par une salutation courte et une première question simple."
         greeting_resp = get_client().models.generate_content(
             model=MODEL,
-            contents=[{"role": "user", "parts": [{"text": greeting_prompt}]}],
+            contents=greeting_prompt,
             config=greeting_cfg,
         )
         greeting_text, greeting_audio_b64, greeting_mime = parse_response(greeting_resp)
