@@ -261,7 +261,6 @@ async function handleTranscribe(req, res) {
       encoding,
       languageCode: language,
       enableAutomaticPunctuation: true,
-      model: "latest_short",
     };
 
     if (language === "fr-CA") {

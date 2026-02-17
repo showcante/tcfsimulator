@@ -1,5 +1,7 @@
 import json
 import os
+import base64
+import asyncio
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -10,7 +12,8 @@ app = FastAPI()
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT") or ""
 LOCATION = os.getenv("VERTEX_LOCATION", "us-central1")
-MODEL = os.getenv("TASK2_VERTEX_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("TASK2_VERTEX_MODEL", "gemini-live-2.5-flash-native-audio")
+VOICE = os.getenv("TASK2_VOICE_NAME", "Aoede")
 SHARED_SECRET = os.getenv("TASK2_LIVE_SHARED_SECRET", "")
 ALLOWED_ORIGINS = {
     origin.strip()
@@ -113,6 +116,44 @@ async def health() -> Dict[str, Any]:
     return {"ok": True, "model": MODEL, "location": LOCATION}
 
 
+async def stream_vertex_to_browser(session: Any, ws: WebSocket) -> None:
+    async for message in session.receive():
+        try:
+            if getattr(message, "text", None):
+                await ws.send_json({"type": "examiner_text", "text": message.text})
+
+            server_content = getattr(message, "server_content", None)
+            if not server_content:
+                continue
+
+            model_turn = getattr(server_content, "model_turn", None)
+            if not model_turn:
+                continue
+
+            parts = getattr(model_turn, "parts", None) or []
+            for part in parts:
+                inline_data = getattr(part, "inline_data", None)
+                if not inline_data:
+                    continue
+                data = getattr(inline_data, "data", None)
+                mime_type = getattr(inline_data, "mime_type", None) or "audio/pcm;rate=24000"
+                if not data:
+                    continue
+                if isinstance(data, bytes):
+                    audio_b64 = base64.b64encode(data).decode("utf-8")
+                else:
+                    audio_b64 = str(data)
+                await ws.send_json(
+                    {
+                        "type": "examiner_audio",
+                        "mimeType": mime_type,
+                        "audioBase64": audio_b64,
+                    }
+                )
+        except Exception:
+            continue
+
+
 @app.websocket("/ws/task2-live")
 async def task2_live(ws: WebSocket) -> None:
     origin = ws.headers.get("origin", "")
@@ -127,76 +168,76 @@ async def task2_live(ws: WebSocket) -> None:
     await ws.accept()
     await ws.send_json({"type": "ready", "message": "Task 2 live socket connected"})
 
-    history_turns: List[Dict[str, str]] = []
+    live_cfg = types.LiveConnectConfig(
+        response_modalities=["AUDIO"],
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=VOICE)
+            )
+        ),
+        system_instruction=SYSTEM_INSTRUCTION,
+    )
 
     try:
-        while True:
-            payload = await ws.receive_text()
+        async with get_client().aio.live.connect(model=MODEL, config=live_cfg) as session:
+            reader_task = asyncio.create_task(stream_vertex_to_browser(session, ws))
             try:
-                message = json.loads(payload)
-            except json.JSONDecodeError:
-                await ws.send_json({"type": "error", "message": "Invalid JSON payload"})
-                continue
+                while True:
+                    payload = await ws.receive_text()
+                    try:
+                        message = json.loads(payload)
+                    except json.JSONDecodeError:
+                        await ws.send_json({"type": "error", "message": "Invalid JSON payload"})
+                        continue
 
-            msg_type = message.get("type", "")
-            if msg_type == "ping":
-                await ws.send_json({"type": "pong"})
-                continue
+                    msg_type = message.get("type", "")
+                    if msg_type == "ping":
+                        await ws.send_json({"type": "pong"})
+                        continue
 
-            if msg_type == "start_session":
-                await ws.send_json(
-                    {
-                        "type": "examiner_text",
-                        "text": "Bonjour. Nous commencons la tache 2. Je vous ecoute, quelles informations souhaitez-vous ?",
-                    }
-                )
-                continue
+                    if msg_type == "start_session":
+                        prompt_context = (message.get("prompt") or "").strip()
+                        seed = (
+                            "Commence l'interaction maintenant. "
+                            "Salue le candidat puis pose une question courte liée à cette consigne:\n"
+                            f"{prompt_context or '(aucune consigne)'}"
+                        )
+                        await session.send_client_content(
+                            turns=[types.Content(role="user", parts=[types.Part(text=seed)])],
+                            turn_complete=True,
+                        )
+                        continue
 
-            if msg_type != "candidate_text":
-                await ws.send_json({"type": "error", "message": f"Unsupported message type: {msg_type}"})
-                continue
+                    if msg_type == "audio_chunk":
+                        audio_b64 = (message.get("audioBase64") or "").strip()
+                        if not audio_b64:
+                            continue
+                        audio_bytes = base64.b64decode(audio_b64)
+                        await session.send_realtime_input(
+                            audio=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000")
+                        )
+                        continue
 
-            candidate_text = (message.get("text") or "").strip()
-            if not candidate_text:
-                await ws.send_json({"type": "error", "message": "Missing candidate text"})
-                continue
+                    if msg_type == "audio_stream_end":
+                        await session.send_realtime_input(audio_stream_end=True)
+                        continue
 
-            prompt_context = (message.get("prompt") or "").strip()
-            history_turns.append({"role": "CANDIDAT", "text": candidate_text})
-            history_turns = history_turns[-12:]
-            conversation_excerpt = "\n".join(
-                [f"{turn['role']}: {turn['text']}" for turn in history_turns]
-            )
-            request_text = (
-                f"{SYSTEM_INSTRUCTION}\n\n"
-                f"Contexte de la tâche 2:\n{prompt_context or '(aucun)'}\n\n"
-                f"Conversation en cours:\n{conversation_excerpt}\n\n"
-                "Réponds maintenant comme examinateur TCF.\n"
-                "N'invente pas un nouveau scénario.\n"
-                "Reste cohérent avec la dernière question du candidat."
-            )
+                    if msg_type == "candidate_text":
+                        # Backward compatibility with previous text mode.
+                        candidate_text = (message.get("text") or "").strip()
+                        if not candidate_text:
+                            continue
+                        await session.send_client_content(
+                            turns=[types.Content(role="user", parts=[types.Part(text=candidate_text)])],
+                            turn_complete=True,
+                        )
+                        continue
 
-            try:
-                cfg = types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    temperature=0.6,
-                    max_output_tokens=180,
-                )
-                response = get_client().models.generate_content(
-                    model=MODEL,
-                    contents=request_text,
-                    config=cfg,
-                )
-            except Exception as err:
-                await ws.send_json(build_vertex_error_payload(err))
-                continue
-
-            examiner_text = parse_response_text(response)
-            if not examiner_text:
-                examiner_text = "Pouvez-vous reformuler votre question, s'il vous plait ?"
-            if examiner_text:
-                history_turns.append({"role": "EXAMINATEUR", "text": examiner_text})
-                history_turns = history_turns[-12:]
-                await ws.send_json({"type": "examiner_text", "text": examiner_text})
+                    await ws.send_json({"type": "error", "message": f"Unsupported message type: {msg_type}"})
+            finally:
+                reader_task.cancel()
     except WebSocketDisconnect:
         return
+    except Exception as err:
+        await ws.send_json(build_vertex_error_payload(err))
+        await ws.close(code=1011, reason="Vertex live failure")

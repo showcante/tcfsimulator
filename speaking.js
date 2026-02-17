@@ -80,6 +80,18 @@ const recorderFlushTimers = {
 const task2LiveUtteranceBuffer = {
   text: "",
 };
+const task2InterimState = {
+  timer: null,
+  lastRawInterim: "",
+};
+const task2NativeAudioState = {
+  stream: null,
+  audioContext: null,
+  source: null,
+  processor: null,
+  muteGain: null,
+  isActive: false,
+};
 const emptyServerSttChunks = {
   2: 0,
   3: 0,
@@ -126,6 +138,62 @@ function clearRecorderFlushTimer(task) {
     clearInterval(recorderFlushTimers[task]);
     recorderFlushTimers[task] = null;
   }
+}
+
+function clearTask2InterimTimer() {
+  if (task2InterimState.timer) {
+    clearTimeout(task2InterimState.timer);
+    task2InterimState.timer = null;
+  }
+}
+
+function b64ToBytes(base64) {
+  const binary = atob(base64 || "");
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+function pcm16ToWavBlob(pcmBytes, sampleRate = 24000, channels = 1) {
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * channels * (bitsPerSample / 8);
+  const blockAlign = channels * (bitsPerSample / 8);
+  const dataSize = pcmBytes.length;
+  const wav = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(wav);
+  let offset = 0;
+  const writeString = (value) => {
+    for (let i = 0; i < value.length; i += 1) view.setUint8(offset + i, value.charCodeAt(i));
+    offset += value.length;
+  };
+
+  writeString("RIFF");
+  view.setUint32(offset, 36 + dataSize, true); offset += 4;
+  writeString("WAVE");
+  writeString("fmt ");
+  view.setUint32(offset, 16, true); offset += 4;
+  view.setUint16(offset, 1, true); offset += 2;
+  view.setUint16(offset, channels, true); offset += 2;
+  view.setUint32(offset, sampleRate, true); offset += 4;
+  view.setUint32(offset, byteRate, true); offset += 4;
+  view.setUint16(offset, blockAlign, true); offset += 2;
+  view.setUint16(offset, bitsPerSample, true); offset += 2;
+  writeString("data");
+  view.setUint32(offset, dataSize, true);
+  new Uint8Array(wav, 44).set(pcmBytes);
+  return new Blob([wav], { type: "audio/wav" });
+}
+
+function float32ToPcm16Base64(input) {
+  const pcm = new Int16Array(input.length);
+  for (let i = 0; i < input.length; i += 1) {
+    const s = Math.max(-1, Math.min(1, input[i]));
+    pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  const bytes = new Uint8Array(pcm.buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
 }
 
 function armTask2SilenceTimer() {
@@ -432,6 +500,29 @@ async function playTextWithGemini(task, text) {
   }
 }
 
+async function playTask2LiveModelAudio(audioBase64, mimeType = "audio/pcm;rate=24000") {
+  try {
+    const bytes = b64ToBytes(audioBase64);
+    let blob = null;
+    if (String(mimeType || "").toLowerCase().includes("wav")) {
+      blob = new Blob([bytes], { type: "audio/wav" });
+    } else {
+      const match = String(mimeType || "").match(/rate=(\d+)/i);
+      const sampleRate = match ? Number(match[1]) || 24000 : 24000;
+      blob = pcm16ToWavBlob(bytes, sampleRate, 1);
+    }
+
+    if (task2ExaminerAudioUrl) URL.revokeObjectURL(task2ExaminerAudioUrl);
+    task2ExaminerAudioUrl = URL.createObjectURL(blob);
+    task2ExaminerAudio.pause();
+    task2ExaminerAudio.currentTime = 0;
+    task2ExaminerAudio.src = task2ExaminerAudioUrl;
+    await task2ExaminerAudio.play();
+  } catch (_error) {
+    speakingStatus[2].textContent = "Examiner audio unavailable";
+  }
+}
+
 function connectTask2Live() {
   const wsUrl = (task2LiveUrlInput?.value || "").trim();
   if (!wsUrl) {
@@ -470,7 +561,12 @@ function connectTask2Live() {
       const tag = currentLang() === "fr" ? "Examinateur" : "Examiner";
       transcriptFields[2].value = `${transcriptFields[2].value}\n[${tag}] ${data.text}`.trim() + "\n";
       speakingStatus[2].textContent = data.text;
-      await playTextWithGemini(2, data.text);
+      return;
+    }
+
+    if (data.type === "examiner_audio" && data.audioBase64) {
+      speakingStatus[2].textContent = "Examiner speaking...";
+      await playTask2LiveModelAudio(data.audioBase64, data.mimeType);
       return;
     }
 
@@ -492,6 +588,7 @@ function connectTask2Live() {
 }
 
 function disconnectTask2Live() {
+  stopTask2NativeAudioCapture(true);
   task2SessionStarted = false;
   if (task2LiveSocket) {
     task2LiveSocket.close(1000, "Client disconnect");
@@ -518,6 +615,114 @@ function sendTask2LiveText(text) {
   return true;
 }
 
+async function startTask2NativeAudioCapture() {
+  if (!task2LiveSocket || task2LiveSocket.readyState !== WebSocket.OPEN) {
+    alert("Connect Task 2 live first.");
+    return;
+  }
+  if (task2NativeAudioState.isActive) return;
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        sampleRate: 16000,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) {
+      alert("Web Audio API is not supported in this browser.");
+      return;
+    }
+
+    const context = new AudioCtx({ sampleRate: 16000 });
+    const source = context.createMediaStreamSource(stream);
+    const processor = context.createScriptProcessor(2048, 1, 1);
+    const muteGain = context.createGain();
+    muteGain.gain.value = 0;
+
+    processor.onaudioprocess = (event) => {
+      if (!task2NativeAudioState.isActive) return;
+      if (!task2LiveSocket || task2LiveSocket.readyState !== WebSocket.OPEN) return;
+      const input = event.inputBuffer.getChannelData(0);
+      task2LiveSocket.send(
+        JSON.stringify({
+          type: "audio_chunk",
+          audioBase64: float32ToPcm16Base64(input),
+          mimeType: "audio/pcm;rate=16000",
+        })
+      );
+    };
+
+    source.connect(processor);
+    processor.connect(muteGain);
+    muteGain.connect(context.destination);
+
+    task2NativeAudioState.stream = stream;
+    task2NativeAudioState.audioContext = context;
+    task2NativeAudioState.source = source;
+    task2NativeAudioState.processor = processor;
+    task2NativeAudioState.muteGain = muteGain;
+    task2NativeAudioState.isActive = true;
+
+    mediaStreams[2] = stream;
+    startMicMeter(2, stream);
+    setRecordingIndicator(2, true);
+    speakingStatus[2].textContent = "Listening (live audio)";
+    armRecordingTimeout(2);
+    activeRecognitionTask = 2;
+  } catch (_error) {
+    keepListeningTask[2] = false;
+    speakingStatus[2].textContent = "Mic permission blocked";
+  }
+}
+
+function stopTask2NativeAudioCapture(fromTimeout = false) {
+  if (!task2NativeAudioState.isActive && !task2NativeAudioState.stream) return;
+
+  task2NativeAudioState.isActive = false;
+  clearRecordingTimeout(2);
+  setRecordingIndicator(2, false);
+  stopMicMeter(2);
+
+  if (task2LiveSocket && task2LiveSocket.readyState === WebSocket.OPEN) {
+    task2LiveSocket.send(JSON.stringify({ type: "audio_stream_end" }));
+  }
+
+  if (task2NativeAudioState.source) {
+    try { task2NativeAudioState.source.disconnect(); } catch (_error) {}
+    task2NativeAudioState.source = null;
+  }
+  if (task2NativeAudioState.processor) {
+    try { task2NativeAudioState.processor.disconnect(); } catch (_error) {}
+    task2NativeAudioState.processor = null;
+  }
+  if (task2NativeAudioState.muteGain) {
+    try { task2NativeAudioState.muteGain.disconnect(); } catch (_error) {}
+    task2NativeAudioState.muteGain = null;
+  }
+  if (task2NativeAudioState.audioContext) {
+    task2NativeAudioState.audioContext.close().catch(() => {});
+    task2NativeAudioState.audioContext = null;
+  }
+  if (task2NativeAudioState.stream) {
+    task2NativeAudioState.stream.getTracks().forEach((track) => track.stop());
+    task2NativeAudioState.stream = null;
+  }
+  mediaStreams[2] = null;
+  if (activeRecognitionTask === 2) activeRecognitionTask = null;
+
+  if (timedOutTask[2] || fromTimeout) {
+    showTimeUp(2);
+  } else {
+    speakingStatus[2].textContent = "Idle";
+  }
+}
+
 function flushTask2LiveUtterance() {
   const buffered = task2LiveUtteranceBuffer.text.trim();
   if (!buffered) return;
@@ -536,6 +741,24 @@ function handleTask2LiveTranscriptChunk(text, forceFlush = false) {
   if (forceFlush || hasSentenceEnd || words >= 10) {
     flushTask2LiveUtterance();
   }
+}
+
+function scheduleTask2InterimSend(interimText) {
+  if (!isTask2VertexMode() || !keepListeningTask[2]) return;
+  const clean = (interimText || "").trim();
+  if (!clean) return;
+
+  clearTask2InterimTimer();
+  task2InterimState.timer = setTimeout(() => {
+    let delta = clean;
+    const prev = task2InterimState.lastRawInterim;
+    if (prev && clean.startsWith(prev)) {
+      delta = clean.slice(prev.length).trim();
+    }
+    task2InterimState.lastRawInterim = clean;
+    if (!delta) return;
+    handleTask2LiveTranscriptChunk(delta);
+  }, 900);
 }
 
 function sendTask2TranscriptToLive() {
@@ -563,6 +786,10 @@ function getRecognitionLanguage() {
 
 function isServerSttSelected() {
   return (sttProviderSelect?.value || "server") === "server";
+}
+
+function shouldUseBrowserSttForTask(task) {
+  return task === 2 && isTask2VertexMode() && !!SpeechRecognition;
 }
 
 function showTimeUp(task) {
@@ -764,12 +991,17 @@ function buildRecognizer(task) {
     if (finalChunk) {
       transcriptFields[task].value = `${transcriptFields[task].value}${finalChunk}`.trim() + " ";
       if (task === 2 && isTask2VertexMode()) {
+        clearTask2InterimTimer();
+        task2InterimState.lastRawInterim = "";
         sendTask2LiveText(finalChunk);
         armTask2SilenceTimer();
       }
       interimTranscript[task] = "";
     } else {
       interimTranscript[task] = latestInterim.trim();
+      if (task === 2 && isTask2VertexMode() && latestInterim.trim()) {
+        scheduleTask2InterimSend(latestInterim.trim());
+      }
     }
   };
 
@@ -1046,6 +1278,8 @@ function stopServerTranscription(task, fromTimeout = false) {
 function startRecognition(task) {
   keepListeningTask[task] = true;
   if (task === 2 && isTask2VertexMode()) {
+    clearTask2InterimTimer();
+    task2InterimState.lastRawInterim = "";
     vertexLoopState[2].sawSpeechThisCycle = false;
     vertexLoopState[2].reconnectAttempts = 0;
     vertexLoopState[2].promptedSilence = false;
@@ -1060,13 +1294,16 @@ function startRecognition(task) {
         })
       );
     }
+    startTask2NativeAudioCapture();
+    return;
   }
 
-  if (task === 2 && isTask2VertexMode() && !isServerSttSelected()) {
-    sttProviderSelect.value = "server";
+  const useBrowserForLiveTask2 = shouldUseBrowserSttForTask(task);
+  if (useBrowserForLiveTask2) {
+    sttProviderSelect.value = "browser";
   }
 
-  if (isServerSttSelected()) {
+  if (isServerSttSelected() && !useBrowserForLiveTask2) {
     startServerTranscription(task);
     return;
   }
@@ -1102,7 +1339,13 @@ function startRecognition(task) {
 function stopRecognition(task, fromTimeout = false) {
   clearRecorderFlushTimer(task);
   if (task === 2 && isTask2VertexMode()) {
+    stopTask2NativeAudioCapture(fromTimeout);
+    clearTask2InterimTimer();
+    task2InterimState.lastRawInterim = "";
     flushTask2LiveUtterance();
+    keepListeningTask[2] = false;
+    clearTask2SilenceTimer();
+    return;
   }
   setRecordingIndicator(task, false);
   stopMicMeter(task);

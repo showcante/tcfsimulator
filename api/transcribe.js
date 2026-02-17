@@ -56,7 +56,6 @@ module.exports = async function handler(req, res) {
       encoding,
       languageCode: language,
       enableAutomaticPunctuation: true,
-      model: "latest_short",
     };
 
     if (language === "fr-CA") {
