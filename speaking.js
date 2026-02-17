@@ -92,6 +92,12 @@ const task2NativeAudioState = {
   muteGain: null,
   isActive: false,
 };
+const task2ExaminerAudioBuffer = {
+  chunks: [],
+  mimeType: "audio/pcm;rate=24000",
+  flushTimer: null,
+  isPlaying: false,
+};
 const emptyServerSttChunks = {
   2: 0,
   3: 0,
@@ -193,6 +199,27 @@ function float32ToPcm16Base64(input) {
   const bytes = new Uint8Array(pcm.buffer);
   let binary = "";
   for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function concatUint8(chunks) {
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
+}
+
+function uint8ToB64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
   return btoa(binary);
 }
 
@@ -523,6 +550,47 @@ async function playTask2LiveModelAudio(audioBase64, mimeType = "audio/pcm;rate=2
   }
 }
 
+function resetTask2ExaminerAudioBuffer() {
+  task2ExaminerAudioBuffer.chunks = [];
+  task2ExaminerAudioBuffer.mimeType = "audio/pcm;rate=24000";
+  if (task2ExaminerAudioBuffer.flushTimer) {
+    clearTimeout(task2ExaminerAudioBuffer.flushTimer);
+    task2ExaminerAudioBuffer.flushTimer = null;
+  }
+}
+
+async function flushTask2ExaminerAudioBuffer() {
+  if (task2ExaminerAudioBuffer.isPlaying) return;
+  if (!task2ExaminerAudioBuffer.chunks.length) return;
+
+  task2ExaminerAudioBuffer.isPlaying = true;
+  try {
+    const merged = concatUint8(task2ExaminerAudioBuffer.chunks);
+    const b64 = uint8ToB64(merged);
+    const mime = task2ExaminerAudioBuffer.mimeType || "audio/pcm;rate=24000";
+    resetTask2ExaminerAudioBuffer();
+    await playTask2LiveModelAudio(b64, mime);
+  } catch (_error) {
+    resetTask2ExaminerAudioBuffer();
+  } finally {
+    task2ExaminerAudioBuffer.isPlaying = false;
+  }
+}
+
+function queueTask2ExaminerAudioChunk(audioBase64, mimeType) {
+  const bytes = b64ToBytes(audioBase64);
+  if (!bytes.length) return;
+  task2ExaminerAudioBuffer.chunks.push(bytes);
+  if (mimeType) task2ExaminerAudioBuffer.mimeType = mimeType;
+
+  if (task2ExaminerAudioBuffer.flushTimer) {
+    clearTimeout(task2ExaminerAudioBuffer.flushTimer);
+  }
+  task2ExaminerAudioBuffer.flushTimer = setTimeout(() => {
+    flushTask2ExaminerAudioBuffer();
+  }, 500);
+}
+
 function connectTask2Live() {
   const wsUrl = (task2LiveUrlInput?.value || "").trim();
   if (!wsUrl) {
@@ -539,6 +607,7 @@ function connectTask2Live() {
   task2LiveSocket = new WebSocket(wsUrl);
 
   task2LiveSocket.onopen = () => {
+    resetTask2ExaminerAudioBuffer();
     setTask2LiveStatusText("live_connected");
     task2SessionStarted = false;
   };
@@ -566,7 +635,12 @@ function connectTask2Live() {
 
     if (data.type === "examiner_audio" && data.audioBase64) {
       speakingStatus[2].textContent = "Examiner speaking...";
-      await playTask2LiveModelAudio(data.audioBase64, data.mimeType);
+      queueTask2ExaminerAudioChunk(data.audioBase64, data.mimeType);
+      return;
+    }
+
+    if (data.type === "examiner_audio_end") {
+      await flushTask2ExaminerAudioBuffer();
       return;
     }
 
@@ -588,6 +662,7 @@ function connectTask2Live() {
 }
 
 function disconnectTask2Live() {
+  resetTask2ExaminerAudioBuffer();
   stopTask2NativeAudioCapture(true);
   task2SessionStarted = false;
   if (task2LiveSocket) {

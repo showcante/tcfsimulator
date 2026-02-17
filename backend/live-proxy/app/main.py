@@ -150,6 +150,9 @@ async def stream_vertex_to_browser(session: Any, ws: WebSocket) -> None:
                         "audioBase64": audio_b64,
                     }
                 )
+
+            if getattr(server_content, "turn_complete", False):
+                await ws.send_json({"type": "examiner_audio_end"})
         except Exception:
             continue
 
