@@ -1,9 +1,6 @@
-import base64
-import io
 import json
 import os
-import wave
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from google import genai
@@ -14,7 +11,6 @@ app = FastAPI()
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT") or ""
 LOCATION = os.getenv("VERTEX_LOCATION", "us-central1")
 MODEL = os.getenv("TASK2_VERTEX_MODEL", "gemini-2.5-flash")
-VOICE = os.getenv("TASK2_VOICE_NAME", "Aoede")
 SHARED_SECRET = os.getenv("TASK2_LIVE_SHARED_SECRET", "")
 ALLOWED_ORIGINS = {
     origin.strip()
@@ -45,52 +41,24 @@ def get_client() -> genai.Client:
     return client
 
 
-def to_b64(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bytes):
-        return base64.b64encode(value).decode("utf-8")
-    if isinstance(value, str):
-        return value
-    return ""
+def parse_response_text(response: Any) -> str:
+    response_text = getattr(response, "text", None)
+    if response_text and response_text.strip():
+        return response_text.strip()
 
-
-def parse_response(response: Any) -> Tuple[str, str, str]:
     text_parts: List[str] = []
-    audio_b64 = ""
-    audio_mime = "audio/wav"
-
     candidates = getattr(response, "candidates", []) or []
     if not candidates:
-        return "", "", audio_mime
+        return ""
 
     content = getattr(candidates[0], "content", None)
     parts = getattr(content, "parts", []) or []
     for part in parts:
         part_text = getattr(part, "text", None)
         if part_text:
-            text_parts.append(part_text)
-        inline_data = getattr(part, "inline_data", None)
-        if inline_data and not audio_b64:
-            audio_b64 = to_b64(getattr(inline_data, "data", None))
-            audio_mime = getattr(inline_data, "mime_type", None) or audio_mime
+            text_parts.append(part_text.strip())
 
-    if audio_b64 and "audio/pcm" in audio_mime.lower():
-        try:
-            pcm_bytes = base64.b64decode(audio_b64)
-            wav_buffer = io.BytesIO()
-            with wave.open(wav_buffer, "wb") as wav_file:
-                wav_file.setnchannels(1)
-                wav_file.setsampwidth(2)  # PCM16
-                wav_file.setframerate(24000)
-                wav_file.writeframes(pcm_bytes)
-            audio_b64 = base64.b64encode(wav_buffer.getvalue()).decode("utf-8")
-            audio_mime = "audio/wav"
-        except Exception:
-            # Keep original payload on conversion failure.
-            pass
-
-    return " ".join(text_parts).strip(), audio_b64, audio_mime
+    return "\n".join([item for item in text_parts if item]).strip()
 
 
 def build_vertex_error_payload(err: Exception) -> Dict[str, Any]:
@@ -98,8 +66,8 @@ def build_vertex_error_payload(err: Exception) -> Dict[str, Any]:
     hint = ""
     if "FAILED_PRECONDITION" in message or "Precondition check failed" in message:
       hint = (
-          "Model/region precondition failed. Verify TASK2_VERTEX_MODEL supports AUDIO in VERTEX_LOCATION "
-          "(recommended: gemini-2.5-flash-preview-tts in us-central1), billing is enabled, and service account has roles/aiplatform.user."
+          "Model/region precondition failed. Verify TASK2_VERTEX_MODEL exists in VERTEX_LOCATION "
+          "(recommended: gemini-2.5-flash in us-central1 or northamerica-northeast2), billing is enabled, and service account has roles/aiplatform.user."
       )
     elif "PERMISSION_DENIED" in message or "403" in message:
       hint = "Service account is missing required Vertex permissions or project access."
@@ -114,7 +82,6 @@ def build_vertex_error_payload(err: Exception) -> Dict[str, Any]:
             "project": PROJECT_ID,
             "location": LOCATION,
             "model": MODEL,
-            "voice": VOICE,
             "exception_type": type(err).__name__,
             "hint": hint,
         },
@@ -169,6 +136,15 @@ async def task2_live(ws: WebSocket) -> None:
                 await ws.send_json({"type": "pong"})
                 continue
 
+            if msg_type == "start_session":
+                await ws.send_json(
+                    {
+                        "type": "examiner_text",
+                        "text": "Bonjour. Nous commencons la tache 2. Je vous ecoute, quelles informations souhaitez-vous ?",
+                    }
+                )
+                continue
+
             if msg_type != "candidate_text":
                 await ws.send_json({"type": "error", "message": f"Unsupported message type: {msg_type}"})
                 continue
@@ -192,14 +168,9 @@ async def task2_live(ws: WebSocket) -> None:
 
             try:
                 cfg = types.GenerateContentConfig(
-                    # TTS models only support AUDIO output.
-                    response_modalities=["AUDIO"],
-                    speech_config=types.SpeechConfig(
-                        voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=VOICE)
-                        )
-                    ),
                     system_instruction=SYSTEM_INSTRUCTION,
+                    temperature=0.6,
+                    max_output_tokens=180,
                 )
                 response = get_client().models.generate_content(
                     model=MODEL,
@@ -210,17 +181,10 @@ async def task2_live(ws: WebSocket) -> None:
                 await ws.send_json(build_vertex_error_payload(err))
                 continue
 
-            examiner_text, audio_b64, mime_type = parse_response(response)
+            examiner_text = parse_response_text(response)
+            if not examiner_text:
+                examiner_text = "Pouvez-vous reformuler votre question, s'il vous plait ?"
             if examiner_text:
                 await ws.send_json({"type": "examiner_text", "text": examiner_text})
-
-            if audio_b64:
-                await ws.send_json(
-                    {
-                        "type": "examiner_audio",
-                        "mimeType": mime_type,
-                        "audioBase64": audio_b64,
-                    }
-                )
     except WebSocketDisconnect:
         return

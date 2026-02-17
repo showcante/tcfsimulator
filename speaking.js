@@ -224,7 +224,7 @@ const task3QuestionBank = [
 ];
 let task3QuestionIndex = 0;
 let task2LiveSocket = null;
-let task2AutoGreetingPending = false;
+let task2SessionStarted = false;
 
 function currentLang() {
   const stored = localStorage.getItem("tcf_lang");
@@ -300,6 +300,44 @@ async function playTask2ExaminerAudio(audioBase64, mimeType = "audio/wav") {
   }
 }
 
+async function playTextWithGemini(task, text) {
+  const cleanText = (text || "").trim();
+  if (!cleanText) return;
+  try {
+    speakingStatus[task].textContent = "Examiner speaking...";
+    const response = await fetch("/api/gemini-tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: cleanText,
+        voiceName: geminiVoiceSelect.value,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || `TTS request failed (${response.status})`);
+    }
+
+    const audioBlob = await response.blob();
+    if (promptAudioUrls[task]) {
+      URL.revokeObjectURL(promptAudioUrls[task]);
+    }
+
+    promptAudioUrls[task] = URL.createObjectURL(audioBlob);
+    const player = promptAudioPlayers[task];
+    player.pause();
+    player.currentTime = 0;
+    player.src = promptAudioUrls[task];
+    await player.play();
+
+    speakingStatus[task].textContent = "Idle";
+  } catch (error) {
+    speakingStatus[task].textContent = "Gemini TTS error";
+    alert(`Gemini TTS failed: ${error.message}`);
+  }
+}
+
 function connectTask2Live() {
   const wsUrl = (task2LiveUrlInput?.value || "").trim();
   if (!wsUrl) {
@@ -313,11 +351,11 @@ function connectTask2Live() {
   }
 
   setTask2LiveStatusText("live_connecting");
-  task2AutoGreetingPending = true;
   task2LiveSocket = new WebSocket(wsUrl);
 
   task2LiveSocket.onopen = () => {
     setTask2LiveStatusText("live_connected");
+    task2SessionStarted = false;
   };
 
   task2LiveSocket.onmessage = async (event) => {
@@ -330,18 +368,7 @@ function connectTask2Live() {
 
     if (data.type === "ready") {
       setTask2LiveStatusText("live_connected");
-      if (task2AutoGreetingPending && task2LiveSocket && task2LiveSocket.readyState === WebSocket.OPEN) {
-        task2AutoGreetingPending = false;
-        speakingStatus[2].textContent = "Waiting examiner greeting...";
-        task2LiveSocket.send(
-          JSON.stringify({
-            type: "candidate_text",
-            text: "Veuillez commencer l'interaction TCF tache 2 avec une salutation et une premiere question courte.",
-            prompt: speakingPrompts[2],
-            language: getRecognitionLanguage(),
-          })
-        );
-      }
+      speakingStatus[2].textContent = "Waiting examiner greeting...";
       return;
     }
 
@@ -349,6 +376,7 @@ function connectTask2Live() {
       const tag = currentLang() === "fr" ? "Examinateur" : "Examiner";
       transcriptFields[2].value = `${transcriptFields[2].value}\n[${tag}] ${data.text}`.trim() + "\n";
       speakingStatus[2].textContent = data.text;
+      await playTextWithGemini(2, data.text);
       return;
     }
 
@@ -359,7 +387,8 @@ function connectTask2Live() {
 
     if (data.type === "error") {
       speakingStatus[2].textContent = "Live error";
-      alert(`Task 2 live error: ${data.message || "Unknown error"}`);
+      const details = data.details ? `\nDetails: ${JSON.stringify(data.details)}` : "";
+      alert(`Task 2 live error: ${data.message || "Unknown error"}${details}`);
     }
   };
 
@@ -374,7 +403,7 @@ function connectTask2Live() {
 }
 
 function disconnectTask2Live() {
-  task2AutoGreetingPending = false;
+  task2SessionStarted = false;
   if (task2LiveSocket) {
     task2LiveSocket.close(1000, "Client disconnect");
     task2LiveSocket = null;
@@ -869,6 +898,16 @@ function startRecognition(task) {
     vertexLoopState[2].reconnectAttempts = 0;
     vertexLoopState[2].promptedSilence = false;
     armTask2SilenceTimer();
+    if (task2LiveSocket && task2LiveSocket.readyState === WebSocket.OPEN && !task2SessionStarted) {
+      task2SessionStarted = true;
+      task2LiveSocket.send(
+        JSON.stringify({
+          type: "start_session",
+          prompt: speakingPrompts[2],
+          language: getRecognitionLanguage(),
+        })
+      );
+    }
   }
 
   if (task === 2 && isTask2VertexMode() && !isServerSttSelected()) {

@@ -89,7 +89,7 @@ gcloud run deploy tcf-task2-live \
   --region us-central1 \
   --allow-unauthenticated \
   --service-account YOUR_SERVICE_ACCOUNT@YOUR_PROJECT_ID.iam.gserviceaccount.com \
-  --set-env-vars GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID,VERTEX_LOCATION=us-central1,TASK2_VERTEX_MODEL=gemini-2.5-flash,TASK2_VOICE_NAME=Aoede
+  --set-env-vars GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID,VERTEX_LOCATION=us-central1,TASK2_VERTEX_MODEL=gemini-2.5-flash
 ```
 
 Optional hardening env vars:
@@ -97,6 +97,10 @@ Optional hardening env vars:
 - `TASK2_LIVE_SHARED_SECRET=your_secret_token`
 
 ### Frontend usage
+Task 2 live mode now uses:
+- Vertex (Cloud Run WebSocket) for examiner text generation.
+- Gemini TTS (`/api/gemini-tts`) for examiner voice playback.
+
 1. Open `/speaking.html`.
 2. In `Prompt Audio Settings`, set **Task 2 Engine** to `Advanced Vertex (WebSocket)`.
 3. Paste your Cloud Run WebSocket URL:
