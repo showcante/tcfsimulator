@@ -153,7 +153,7 @@ async def task2_live(ws: WebSocket) -> None:
     await ws.accept()
     await ws.send_json({"type": "ready", "message": "Task 2 live socket connected"})
 
-    history: List[Dict[str, Any]] = []
+    history: List[str] = []
 
     try:
         while True:
@@ -179,12 +179,16 @@ async def task2_live(ws: WebSocket) -> None:
                 continue
 
             prompt_context = (message.get("prompt") or "").strip()
-            user_turn = candidate_text
-            if prompt_context:
-                user_turn = f"Contexte de rôle (tâche 2): {prompt_context}\n\nRéponse du candidat: {candidate_text}"
+            history.append(candidate_text)
+            history = history[-6:]
 
-            history.append({"role": "user", "parts": [{"text": user_turn}]})
-            history = history[-12:]
+            conversation_excerpt = "\n".join([f"- {item}" for item in history])
+            request_text = (
+                f"{SYSTEM_INSTRUCTION}\n\n"
+                f"Contexte de la tâche 2:\n{prompt_context or '(aucun)'}\n\n"
+                f"Historique candidat (récent):\n{conversation_excerpt}\n\n"
+                f"Réponds maintenant comme examinateur avec une relance courte."
+            )
 
             try:
                 cfg = types.GenerateContentConfig(
@@ -199,7 +203,7 @@ async def task2_live(ws: WebSocket) -> None:
                 )
                 response = get_client().models.generate_content(
                     model=MODEL,
-                    contents=history,
+                    contents=request_text,
                     config=cfg,
                 )
             except Exception as err:
@@ -208,8 +212,6 @@ async def task2_live(ws: WebSocket) -> None:
 
             examiner_text, audio_b64, mime_type = parse_response(response)
             if examiner_text:
-                history.append({"role": "model", "parts": [{"text": examiner_text}]})
-                history = history[-12:]
                 await ws.send_json({"type": "examiner_text", "text": examiner_text})
 
             if audio_b64:
