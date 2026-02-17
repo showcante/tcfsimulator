@@ -864,7 +864,7 @@ async function transcribeBlobWithServer(task, blob) {
       showTimeUp(task);
     } else {
       const audioLooksPresent = (blob?.size || 0) > 5000;
-      if (emptyServerSttChunks[task] >= 3) {
+      if (emptyServerSttChunks[task] >= 6) {
         speakingStatus[task].textContent = audioLooksPresent
           ? "Audio captured, but words were not recognized. Try slower speech and set language to French (Canada)."
           : "No speech recognized (check mic input device and speak closer)";
@@ -972,7 +972,7 @@ async function startServerTranscription(task) {
       }
     };
 
-    recorder.start(isTask2VertexLiveMode ? 3000 : 250);
+    recorder.start(isTask2VertexLiveMode ? 6000 : 250);
     setRecordingIndicator(task, true);
     armRecordingTimeout(task);
   } catch (_error) {

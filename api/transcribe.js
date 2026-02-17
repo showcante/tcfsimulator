@@ -56,7 +56,14 @@ module.exports = async function handler(req, res) {
       encoding,
       languageCode: language,
       enableAutomaticPunctuation: true,
+      model: "latest_short",
     };
+
+    if (language === "fr-CA") {
+      config.alternativeLanguageCodes = ["fr-FR"];
+    } else if (language === "fr-FR") {
+      config.alternativeLanguageCodes = ["fr-CA"];
+    }
 
     if ((encoding === "WEBM_OPUS" || encoding === "OGG_OPUS") && sampleRateHertz > 0) {
       config.sampleRateHertz = sampleRateHertz;
