@@ -353,6 +353,23 @@ const task3QuestionBank = [
 let task3QuestionIndex = 0;
 let task2LiveSocket = null;
 let task2SessionStarted = false;
+let task2ReconnectInProgress = false;
+let task2WsPingTimer = null;
+
+function clearTask2WsHeartbeat() {
+  if (task2WsPingTimer) {
+    clearInterval(task2WsPingTimer);
+    task2WsPingTimer = null;
+  }
+}
+
+function startTask2WsHeartbeat() {
+  clearTask2WsHeartbeat();
+  task2WsPingTimer = setInterval(() => {
+    if (!task2LiveSocket || task2LiveSocket.readyState !== WebSocket.OPEN) return;
+    task2LiveSocket.send(JSON.stringify({ type: "ping", t: Date.now() }));
+  }, 15000);
+}
 
 function currentLang() {
   const stored = localStorage.getItem("tcf_lang");
@@ -608,6 +625,8 @@ function connectTask2Live() {
 
   task2LiveSocket.onopen = () => {
     resetTask2ExaminerAudioBuffer();
+    task2ReconnectInProgress = false;
+    startTask2WsHeartbeat();
     setTask2LiveStatusText("live_connected");
     task2SessionStarted = false;
   };
@@ -647,21 +666,35 @@ function connectTask2Live() {
     if (data.type === "error") {
       speakingStatus[2].textContent = "Live error";
       const details = data.details ? `\nDetails: ${JSON.stringify(data.details)}` : "";
+      const raw = `${data.message || ""} ${details}`;
+      if (raw.includes("keepalive ping timeout") && !task2ReconnectInProgress) {
+        task2ReconnectInProgress = true;
+        setTask2LiveStatusText("live_connecting");
+        speakingStatus[2].textContent = "Reconnecting live session...";
+        setTimeout(() => {
+          disconnectTask2Live();
+          connectTask2Live();
+        }, 900);
+        return;
+      }
       alert(`Task 2 live error: ${data.message || "Unknown error"}${details}`);
     }
   };
 
   task2LiveSocket.onerror = () => {
+    clearTask2WsHeartbeat();
     setTask2LiveStatusText("live_disconnected");
     speakingStatus[2].textContent = "Live socket error";
   };
 
   task2LiveSocket.onclose = () => {
+    clearTask2WsHeartbeat();
     setTask2LiveStatusText("live_disconnected");
   };
 }
 
 function disconnectTask2Live() {
+  clearTask2WsHeartbeat();
   resetTask2ExaminerAudioBuffer();
   stopTask2NativeAudioCapture(true);
   task2SessionStarted = false;

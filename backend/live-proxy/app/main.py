@@ -83,6 +83,8 @@ def build_vertex_error_payload(err: Exception) -> Dict[str, Any]:
       hint = "Service account is missing required Vertex permissions or project access."
     elif "RESOURCE_EXHAUSTED" in message or "429" in message:
       hint = "Quota/rate limit reached. Check Vertex quotas for this project/region."
+    elif "keepalive ping timeout" in message or "ConnectionClosedError" in message:
+      hint = "Vertex live session dropped (timeout). Reconnect Task 2 live and start recording again."
 
     return {
         "type": "error",
@@ -243,4 +245,4 @@ async def task2_live(ws: WebSocket) -> None:
         return
     except Exception as err:
         await ws.send_json(build_vertex_error_payload(err))
-        await ws.close(code=1011, reason="Vertex live failure")
+        await ws.close(code=1000, reason="Vertex live failure")
