@@ -61,6 +61,10 @@ const mediaStreams = {
   2: null,
   3: null,
 };
+const emptyServerSttChunks = {
+  2: 0,
+  3: 0,
+};
 const taskMaxDurationMs = {
   2: 3.5 * 60 * 1000,
   3: 4.5 * 60 * 1000,
@@ -288,9 +292,10 @@ async function playTask2ExaminerAudio(audioBase64, mimeType = "audio/wav") {
     promptAudioUrls[2] = URL.createObjectURL(blob);
     const player = promptAudioPlayers[2];
     player.src = promptAudioUrls[2];
-    await player.play().catch(() => {});
+    await player.play();
   } catch (_error) {
-    // Ignore playback issues; user can still use player controls manually.
+    speakingStatus[2].textContent = "Audio playback blocked";
+    alert("Examiner audio could not autoplay. Click the audio player play button once, then continue.");
   }
 }
 
@@ -716,6 +721,7 @@ async function transcribeBlobWithServer(task, blob) {
   const data = await response.json();
   const text = (data.text || "").trim();
   if (text) {
+    emptyServerSttChunks[task] = 0;
     transcriptFields[task].value = `${transcriptFields[task].value}${text} `.trim() + " ";
     if (task === 2 && isTask2VertexMode()) {
       sendTask2LiveText(text);
@@ -727,10 +733,15 @@ async function transcribeBlobWithServer(task, blob) {
       speakingStatus[task].textContent = "Idle";
     }
   } else {
+    emptyServerSttChunks[task] += 1;
     if (timedOutTask[task]) {
       showTimeUp(task);
     } else {
-      speakingStatus[task].textContent = "No speech recognized (try speaking longer, closer to mic)";
+      if (emptyServerSttChunks[task] >= 3) {
+        speakingStatus[task].textContent = "No speech recognized (check mic input device and speak closer)";
+      } else {
+        speakingStatus[task].textContent = "Listening";
+      }
     }
   }
 }
@@ -821,7 +832,7 @@ async function startServerTranscription(task) {
       }
     };
 
-    recorder.start(isTask2VertexLiveMode ? 5000 : 250);
+    recorder.start(isTask2VertexLiveMode ? 10000 : 250);
     armRecordingTimeout(task);
   } catch (_error) {
     speakingStatus[task].textContent = "Mic permission blocked";
