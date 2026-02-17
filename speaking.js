@@ -224,6 +224,7 @@ const task3QuestionBank = [
 ];
 let task3QuestionIndex = 0;
 let task2LiveSocket = null;
+let task2AutoGreetingPending = false;
 
 function currentLang() {
   const stored = localStorage.getItem("tcf_lang");
@@ -312,6 +313,7 @@ function connectTask2Live() {
   }
 
   setTask2LiveStatusText("live_connecting");
+  task2AutoGreetingPending = true;
   task2LiveSocket = new WebSocket(wsUrl);
 
   task2LiveSocket.onopen = () => {
@@ -328,6 +330,18 @@ function connectTask2Live() {
 
     if (data.type === "ready") {
       setTask2LiveStatusText("live_connected");
+      if (task2AutoGreetingPending && task2LiveSocket && task2LiveSocket.readyState === WebSocket.OPEN) {
+        task2AutoGreetingPending = false;
+        speakingStatus[2].textContent = "Waiting examiner greeting...";
+        task2LiveSocket.send(
+          JSON.stringify({
+            type: "candidate_text",
+            text: "Veuillez commencer l'interaction TCF tache 2 avec une salutation et une premiere question courte.",
+            prompt: speakingPrompts[2],
+            language: getRecognitionLanguage(),
+          })
+        );
+      }
       return;
     }
 
@@ -360,6 +374,7 @@ function connectTask2Live() {
 }
 
 function disconnectTask2Live() {
+  task2AutoGreetingPending = false;
   if (task2LiveSocket) {
     task2LiveSocket.close(1000, "Client disconnect");
     task2LiveSocket = null;

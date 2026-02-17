@@ -155,37 +155,6 @@ async def task2_live(ws: WebSocket) -> None:
 
     history: List[Dict[str, Any]] = []
 
-    # Send an immediate greeting turn so frontend audio path can be verified.
-    try:
-        greeting_cfg = types.GenerateContentConfig(
-            response_modalities=["AUDIO"],
-            speech_config=types.SpeechConfig(
-                voice_config=types.VoiceConfig(
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=VOICE)
-                )
-            ),
-            system_instruction=SYSTEM_INSTRUCTION,
-        )
-        greeting_prompt = "Commence l'interaction TCF tâche 2 par une salutation courte et une première question simple."
-        greeting_resp = get_client().models.generate_content(
-            model=MODEL,
-            contents=greeting_prompt,
-            config=greeting_cfg,
-        )
-        greeting_text, greeting_audio_b64, greeting_mime = parse_response(greeting_resp)
-        if greeting_text:
-            await ws.send_json({"type": "examiner_text", "text": greeting_text})
-        if greeting_audio_b64:
-            await ws.send_json(
-                {
-                    "type": "examiner_audio",
-                    "mimeType": greeting_mime,
-                    "audioBase64": greeting_audio_b64,
-                }
-            )
-    except Exception as err:
-        await ws.send_json(build_vertex_error_payload(err))
-
     try:
         while True:
             payload = await ws.receive_text()
