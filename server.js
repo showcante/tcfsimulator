@@ -206,6 +206,7 @@ async function handleTranscribe(req, res) {
     const parsed = await readJsonBody(req);
     const audioBase64 = (parsed.audioBase64 || "").trim();
     const mimeType = (parsed.mimeType || "audio/webm").trim();
+    const sampleRateHertz = Number(parsed.sampleRateHertz || 0);
     const language = (parsed.language || "fr-FR").trim();
 
     if (!audioBase64) {
@@ -216,6 +217,15 @@ async function handleTranscribe(req, res) {
     let encoding = "WEBM_OPUS";
     if (mimeType.includes("wav")) encoding = "LINEAR16";
     if (mimeType.includes("ogg")) encoding = "OGG_OPUS";
+    const config = {
+      encoding,
+      languageCode: language,
+      enableAutomaticPunctuation: true,
+    };
+
+    if ((encoding === "WEBM_OPUS" || encoding === "OGG_OPUS") && sampleRateHertz > 0) {
+      config.sampleRateHertz = sampleRateHertz;
+    }
 
     const endpoint = `https://speech.googleapis.com/v1/speech:recognize?key=${encodeURIComponent(GOOGLE_STT_API_KEY)}`;
     const response = await fetch(endpoint, {
@@ -224,11 +234,7 @@ async function handleTranscribe(req, res) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        config: {
-          encoding,
-          languageCode: language,
-          enableAutomaticPunctuation: true,
-        },
+        config,
         audio: {
           content: audioBase64,
         },

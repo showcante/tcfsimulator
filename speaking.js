@@ -693,12 +693,15 @@ async function transcribeBlobWithServer(task, blob) {
   for (let i = 0; i < bytes.byteLength; i += 1) binary += String.fromCharCode(bytes[i]);
   const audioBase64 = btoa(binary);
 
+  const mimeType = blob.type || "audio/webm";
+  const isOpus = mimeType.includes("webm") || mimeType.includes("ogg");
   const response = await fetch("/api/transcribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       audioBase64,
-      mimeType: blob.type || "audio/webm",
+      mimeType,
+      sampleRateHertz: isOpus ? 48000 : undefined,
       language: getRecognitionLanguage(),
     }),
   });
