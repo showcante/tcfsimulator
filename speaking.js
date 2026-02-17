@@ -79,10 +79,38 @@ const keepListeningTask = {
 };
 const vertexLoopState = {
   2: {
-    retriesWithoutSpeech: 0,
     sawSpeechThisCycle: false,
   },
 };
+let task2SilenceTimer = null;
+
+function clearTask2SilenceTimer() {
+  if (task2SilenceTimer) {
+    clearTimeout(task2SilenceTimer);
+    task2SilenceTimer = null;
+  }
+}
+
+function speakExaminerPromptFr(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "fr-CA";
+  utterance.rate = 0.95;
+  window.speechSynthesis.speak(utterance);
+}
+
+function armTask2SilenceTimer() {
+  clearTask2SilenceTimer();
+  if (!isTask2VertexMode() || !keepListeningTask[2]) return;
+  task2SilenceTimer = setTimeout(() => {
+    const prompt = "Je ne t'entends pas, peux-tu répéter ?";
+    transcriptFields[2].value = `${transcriptFields[2].value}\n[Examinateur] ${prompt}`.trim() + "\n";
+    speakingStatus[2].textContent = prompt;
+    speakExaminerPromptFr(prompt);
+    armTask2SilenceTimer();
+  }, 10000);
+}
 
 const promptAudioUrls = {
   2: null,
@@ -574,7 +602,7 @@ function buildRecognizer(task) {
       noSpeechCount[task] = 0;
       if (task === 2 && isTask2VertexMode()) {
         vertexLoopState[2].sawSpeechThisCycle = true;
-        vertexLoopState[2].retriesWithoutSpeech = 0;
+        armTask2SilenceTimer();
       }
       speakingStatus[task].textContent = "Listening";
     }
@@ -583,6 +611,7 @@ function buildRecognizer(task) {
       transcriptFields[task].value = `${transcriptFields[task].value}${finalChunk}`.trim() + " ";
       if (task === 2 && isTask2VertexMode()) {
         sendTask2LiveText(finalChunk);
+        armTask2SilenceTimer();
       }
       interimTranscript[task] = "";
     } else {
@@ -599,12 +628,14 @@ function buildRecognizer(task) {
 
     if (event.error === "audio-capture") {
       if (task === 2 && isTask2VertexMode()) keepListeningTask[2] = false;
+      if (task === 2) clearTask2SilenceTimer();
       speakingStatus[task].textContent = "Mic not detected";
       return;
     }
 
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
       if (task === 2 && isTask2VertexMode()) keepListeningTask[2] = false;
+      if (task === 2) clearTask2SilenceTimer();
       speakingStatus[task].textContent = "Mic permission blocked";
       return;
     }
@@ -633,18 +664,6 @@ function buildRecognizer(task) {
     }
 
     if (task === 2 && isTask2VertexMode() && keepListeningTask[2]) {
-      if (!vertexLoopState[2].sawSpeechThisCycle) {
-        vertexLoopState[2].retriesWithoutSpeech += 1;
-      } else {
-        vertexLoopState[2].retriesWithoutSpeech = 0;
-      }
-
-      if (vertexLoopState[2].retriesWithoutSpeech >= 4) {
-        keepListeningTask[2] = false;
-        speakingStatus[2].textContent = "Mic not capturing speech. Use Chrome and check mic permission.";
-        return;
-      }
-
       speakingStatus[2].textContent = "Listening (reconnecting...)";
       setTimeout(() => {
         if (!keepListeningTask[2]) return;
@@ -692,6 +711,7 @@ async function transcribeBlobWithServer(task, blob) {
     transcriptFields[task].value = `${transcriptFields[task].value}${text} `.trim() + " ";
     if (task === 2 && isTask2VertexMode()) {
       sendTask2LiveText(text);
+      armTask2SilenceTimer();
     }
     if (timedOutTask[task]) {
       showTimeUp(task);
@@ -788,8 +808,8 @@ function stopServerTranscription(task, fromTimeout = false) {
 function startRecognition(task) {
   keepListeningTask[task] = true;
   if (task === 2 && isTask2VertexMode()) {
-    vertexLoopState[2].retriesWithoutSpeech = 0;
     vertexLoopState[2].sawSpeechThisCycle = false;
+    armTask2SilenceTimer();
   }
 
   if (task === 2 && isTask2VertexMode() && isServerSttSelected()) {
@@ -832,8 +852,8 @@ function startRecognition(task) {
 function stopRecognition(task, fromTimeout = false) {
   keepListeningTask[task] = false;
   if (task === 2) {
-    vertexLoopState[2].retriesWithoutSpeech = 0;
     vertexLoopState[2].sawSpeechThisCycle = false;
+    clearTask2SilenceTimer();
   }
 
   if (isServerSttSelected()) {
