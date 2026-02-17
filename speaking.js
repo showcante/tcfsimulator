@@ -73,6 +73,10 @@ const timedOutTask = {
   2: false,
   3: false,
 };
+const keepListeningTask = {
+  2: false,
+  3: false,
+};
 
 const promptAudioUrls = {
   2: null,
@@ -600,7 +604,7 @@ function buildRecognizer(task) {
       interimTranscript[task] = "";
     }
 
-    if (noSpeechCount[task] >= 3) {
+    if (noSpeechCount[task] >= 3 && !(task === 2 && isTask2VertexMode() && keepListeningTask[2])) {
       speakingStatus[task].textContent = "Stopped: no speech captured";
       noSpeechCount[task] = 0;
       if (activeRecognitionTask === task) activeRecognitionTask = null;
@@ -612,6 +616,20 @@ function buildRecognizer(task) {
       showTimeUp(task);
       return;
     }
+
+    if (task === 2 && isTask2VertexMode() && keepListeningTask[2]) {
+      speakingStatus[2].textContent = "Listening (reconnecting...)";
+      setTimeout(() => {
+        if (!keepListeningTask[2]) return;
+        try {
+          recognizer.start();
+        } catch (_error) {
+          // Duplicate start races can happen; next end will retry.
+        }
+      }, 150);
+      return;
+    }
+
     speakingStatus[task].textContent = "Idle";
   };
 
@@ -741,6 +759,8 @@ function stopServerTranscription(task, fromTimeout = false) {
 }
 
 function startRecognition(task) {
+  keepListeningTask[task] = true;
+
   if (task === 2 && isTask2VertexMode() && isServerSttSelected()) {
     sttProviderSelect.value = "browser";
   }
@@ -779,6 +799,8 @@ function startRecognition(task) {
 }
 
 function stopRecognition(task, fromTimeout = false) {
+  keepListeningTask[task] = false;
+
   if (isServerSttSelected()) {
     stopServerTranscription(task, fromTimeout);
     return;
