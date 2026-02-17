@@ -296,6 +296,8 @@ function connectTask2Live() {
     }
 
     if (data.type === "examiner_text" && data.text) {
+      const tag = currentLang() === "fr" ? "Examinateur" : "Examiner";
+      transcriptFields[2].value = `${transcriptFields[2].value}\n[${tag}] ${data.text}`.trim() + "\n";
       speakingStatus[2].textContent = data.text;
       return;
     }
@@ -329,6 +331,24 @@ function disconnectTask2Live() {
   setTask2LiveStatusText("live_disconnected");
 }
 
+function sendTask2LiveText(text) {
+  const trimmed = (text || "").trim();
+  if (!trimmed) return false;
+  if (!isTask2VertexMode()) return false;
+  if (!task2LiveSocket || task2LiveSocket.readyState !== WebSocket.OPEN) return false;
+
+  task2LiveSocket.send(
+    JSON.stringify({
+      type: "candidate_text",
+      text: trimmed,
+      prompt: speakingPrompts[2],
+      language: getRecognitionLanguage(),
+    })
+  );
+  speakingStatus[2].textContent = uiText("live_sent");
+  return true;
+}
+
 function sendTask2TranscriptToLive() {
   if (!isTask2VertexMode()) {
     alert("Set Task 2 Engine to Advanced Vertex first.");
@@ -345,16 +365,7 @@ function sendTask2TranscriptToLive() {
     return;
   }
 
-  task2LiveSocket.send(
-    JSON.stringify({
-      type: "candidate_text",
-      text,
-      prompt: speakingPrompts[2],
-      language: getRecognitionLanguage(),
-    })
-  );
-
-  speakingStatus[2].textContent = uiText("live_sent");
+  sendTask2LiveText(text);
 }
 
 function getRecognitionLanguage() {
@@ -553,6 +564,9 @@ function buildRecognizer(task) {
 
     if (finalChunk) {
       transcriptFields[task].value = `${transcriptFields[task].value}${finalChunk}`.trim() + " ";
+      if (task === 2 && isTask2VertexMode()) {
+        sendTask2LiveText(finalChunk);
+      }
       interimTranscript[task] = "";
     } else {
       interimTranscript[task] = latestInterim.trim();
@@ -631,6 +645,9 @@ async function transcribeBlobWithServer(task, blob) {
   const text = (data.text || "").trim();
   if (text) {
     transcriptFields[task].value = `${transcriptFields[task].value}${text} `.trim() + " ";
+    if (task === 2 && isTask2VertexMode()) {
+      sendTask2LiveText(text);
+    }
     if (timedOutTask[task]) {
       showTimeUp(task);
     } else {
@@ -724,6 +741,10 @@ function stopServerTranscription(task, fromTimeout = false) {
 }
 
 function startRecognition(task) {
+  if (task === 2 && isTask2VertexMode() && isServerSttSelected()) {
+    sttProviderSelect.value = "browser";
+  }
+
   if (isServerSttSelected()) {
     startServerTranscription(task);
     return;
