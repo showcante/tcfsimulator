@@ -2,6 +2,29 @@ function sendJson(res, statusCode, payload) {
   res.status(statusCode).json(payload);
 }
 
+function buildSttErrorPayload(data, context) {
+  const message = String(data?.error?.message || "");
+  let hint = "";
+  if (message.includes("Sync input too long")) {
+    hint =
+      "Audio segment is too long for sync recognize. Deploy the latest frontend chunking build or use LongRunningRecognize for >60s segments.";
+  } else if (message.includes("Invalid recognition 'config': Opus sample rate")) {
+    hint =
+      "Opus sample rate missing/invalid. Ensure client sends sampleRateHertz=48000 and backend forwards it in config.";
+  } else if (message.includes("PERMISSION_DENIED")) {
+    hint = "Check GOOGLE_STT_API_KEY permissions and that Speech-to-Text API is enabled.";
+  }
+
+  return {
+    code: "GOOGLE_STT_FAILED",
+    message: `Google STT error: ${JSON.stringify(data)}`,
+    details: {
+      hint,
+      ...context,
+    },
+  };
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     sendJson(res, 405, { error: "Method not allowed" });
@@ -55,7 +78,8 @@ module.exports = async function handler(req, res) {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      sendJson(res, 502, { error: `Google STT error: ${JSON.stringify(data)}` });
+      const payload = buildSttErrorPayload(data, { mimeType, encoding, sampleRateHertz, language });
+      sendJson(res, 502, { error: payload.message, code: payload.code, details: payload.details });
       return;
     }
 

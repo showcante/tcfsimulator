@@ -76,6 +76,34 @@ def parse_response(response: Any) -> Tuple[str, str, str]:
     return " ".join(text_parts).strip(), audio_b64, audio_mime
 
 
+def build_vertex_error_payload(err: Exception) -> Dict[str, Any]:
+    message = str(err)
+    hint = ""
+    if "FAILED_PRECONDITION" in message or "Precondition check failed" in message:
+      hint = (
+          "Model/region precondition failed. Verify TASK2_VERTEX_MODEL supports AUDIO in VERTEX_LOCATION "
+          "(recommended: gemini-2.5-flash-preview-tts in us-central1), billing is enabled, and service account has roles/aiplatform.user."
+      )
+    elif "PERMISSION_DENIED" in message or "403" in message:
+      hint = "Service account is missing required Vertex permissions or project access."
+    elif "RESOURCE_EXHAUSTED" in message or "429" in message:
+      hint = "Quota/rate limit reached. Check Vertex quotas for this project/region."
+
+    return {
+        "type": "error",
+        "code": "VERTEX_REQUEST_FAILED",
+        "message": message,
+        "details": {
+            "project": PROJECT_ID,
+            "location": LOCATION,
+            "model": MODEL,
+            "voice": VOICE,
+            "exception_type": type(err).__name__,
+            "hint": hint,
+        },
+    }
+
+
 def is_origin_allowed(origin: str) -> bool:
     if not ALLOWED_ORIGINS:
         return True
@@ -157,7 +185,7 @@ async def task2_live(ws: WebSocket) -> None:
                     config=cfg,
                 )
             except Exception as err:
-                await ws.send_json({"type": "error", "message": f"Vertex request failed: {err}"})
+                await ws.send_json(build_vertex_error_payload(err))
                 continue
 
             examiner_text, audio_b64, mime_type = parse_response(response)

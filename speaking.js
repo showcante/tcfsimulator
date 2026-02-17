@@ -708,7 +708,9 @@ async function transcribeBlobWithServer(task, blob) {
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || `STT failed (${response.status})`);
+    const details = body.details ? `\nDetails: ${JSON.stringify(body.details)}` : "";
+    const code = body.code ? `${body.code}: ` : "";
+    throw new Error(`${code}${body.error || `STT failed (${response.status})`}${details}`);
   }
 
   const data = await response.json();
