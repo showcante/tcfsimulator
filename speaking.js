@@ -80,6 +80,8 @@ const keepListeningTask = {
 const vertexLoopState = {
   2: {
     sawSpeechThisCycle: false,
+    reconnectAttempts: 0,
+    promptedSilence: false,
   },
 };
 let task2SilenceTimer = null;
@@ -91,24 +93,15 @@ function clearTask2SilenceTimer() {
   }
 }
 
-function speakExaminerPromptFr(text) {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "fr-CA";
-  utterance.rate = 0.95;
-  window.speechSynthesis.speak(utterance);
-}
-
 function armTask2SilenceTimer() {
   clearTask2SilenceTimer();
   if (!isTask2VertexMode() || !keepListeningTask[2]) return;
   task2SilenceTimer = setTimeout(() => {
+    if (vertexLoopState[2].promptedSilence) return;
+    vertexLoopState[2].promptedSilence = true;
     const prompt = "Je ne t'entends pas, peux-tu répéter ?";
     transcriptFields[2].value = `${transcriptFields[2].value}\n[Examinateur] ${prompt}`.trim() + "\n";
     speakingStatus[2].textContent = prompt;
-    speakExaminerPromptFr(prompt);
-    armTask2SilenceTimer();
   }, 10000);
 }
 
@@ -602,6 +595,8 @@ function buildRecognizer(task) {
       noSpeechCount[task] = 0;
       if (task === 2 && isTask2VertexMode()) {
         vertexLoopState[2].sawSpeechThisCycle = true;
+        vertexLoopState[2].reconnectAttempts = 0;
+        vertexLoopState[2].promptedSilence = false;
         armTask2SilenceTimer();
       }
       speakingStatus[task].textContent = "Listening";
@@ -664,6 +659,14 @@ function buildRecognizer(task) {
     }
 
     if (task === 2 && isTask2VertexMode() && keepListeningTask[2]) {
+      vertexLoopState[2].reconnectAttempts += 1;
+      if (vertexLoopState[2].reconnectAttempts > 12) {
+        keepListeningTask[2] = false;
+        clearTask2SilenceTimer();
+        speakingStatus[2].textContent = "Recording stopped. Click Start again and speak immediately.";
+        return;
+      }
+
       speakingStatus[2].textContent = "Listening (reconnecting...)";
       setTimeout(() => {
         if (!keepListeningTask[2]) return;
@@ -672,7 +675,7 @@ function buildRecognizer(task) {
         } catch (_error) {
           // Duplicate start races can happen; next end will retry.
         }
-      }, 150);
+      }, 500);
       return;
     }
 
@@ -809,6 +812,8 @@ function startRecognition(task) {
   keepListeningTask[task] = true;
   if (task === 2 && isTask2VertexMode()) {
     vertexLoopState[2].sawSpeechThisCycle = false;
+    vertexLoopState[2].reconnectAttempts = 0;
+    vertexLoopState[2].promptedSilence = false;
     armTask2SilenceTimer();
   }
 
@@ -853,6 +858,8 @@ function stopRecognition(task, fromTimeout = false) {
   keepListeningTask[task] = false;
   if (task === 2) {
     vertexLoopState[2].sawSpeechThisCycle = false;
+    vertexLoopState[2].reconnectAttempts = 0;
+    vertexLoopState[2].promptedSilence = false;
     clearTask2SilenceTimer();
   }
 
