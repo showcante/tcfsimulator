@@ -22,6 +22,10 @@ const speakingStatus = {
   2: document.getElementById("status-speaking-2"),
   3: document.getElementById("status-speaking-3"),
 };
+const recordingIndicators = {
+  2: document.getElementById("rec-indicator-2"),
+  3: document.getElementById("rec-indicator-3"),
+};
 
 const ttsProviderSelect = document.getElementById("tts-provider");
 const geminiVoiceSelect = document.getElementById("gemini-voice");
@@ -113,6 +117,8 @@ const promptAudioUrls = {
   2: null,
   3: null,
 };
+let task2ExaminerAudioUrl = null;
+const task2ExaminerAudio = new Audio();
 
 const task2QuestionBanks = {
   february: [
@@ -274,30 +280,10 @@ function setTask2LiveStatusText(key) {
   task2LiveStatus.textContent = uiText(key);
 }
 
-function b64ToUint8Array(base64) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-async function playTask2ExaminerAudio(audioBase64, mimeType = "audio/wav") {
-  try {
-    const bytes = b64ToUint8Array(audioBase64);
-    const blob = new Blob([bytes], { type: mimeType || "audio/wav" });
-    if (promptAudioUrls[2]) {
-      URL.revokeObjectURL(promptAudioUrls[2]);
-    }
-    promptAudioUrls[2] = URL.createObjectURL(blob);
-    const player = promptAudioPlayers[2];
-    player.src = promptAudioUrls[2];
-    await player.play();
-  } catch (_error) {
-    speakingStatus[2].textContent = "Audio playback blocked";
-    alert("Examiner audio could not autoplay. Click the audio player play button once, then continue.");
-  }
+function setRecordingIndicator(task, isActive) {
+  const indicator = recordingIndicators[task];
+  if (!indicator) return;
+  indicator.classList.toggle("hidden", !isActive);
 }
 
 async function playTextWithGemini(task, text) {
@@ -320,16 +306,15 @@ async function playTextWithGemini(task, text) {
     }
 
     const audioBlob = await response.blob();
-    if (promptAudioUrls[task]) {
-      URL.revokeObjectURL(promptAudioUrls[task]);
+    if (task2ExaminerAudioUrl) {
+      URL.revokeObjectURL(task2ExaminerAudioUrl);
     }
 
-    promptAudioUrls[task] = URL.createObjectURL(audioBlob);
-    const player = promptAudioPlayers[task];
-    player.pause();
-    player.currentTime = 0;
-    player.src = promptAudioUrls[task];
-    await player.play();
+    task2ExaminerAudioUrl = URL.createObjectURL(audioBlob);
+    task2ExaminerAudio.pause();
+    task2ExaminerAudio.currentTime = 0;
+    task2ExaminerAudio.src = task2ExaminerAudioUrl;
+    await task2ExaminerAudio.play();
 
     speakingStatus[task].textContent = "Idle";
   } catch (error) {
@@ -377,11 +362,6 @@ function connectTask2Live() {
       transcriptFields[2].value = `${transcriptFields[2].value}\n[${tag}] ${data.text}`.trim() + "\n";
       speakingStatus[2].textContent = data.text;
       await playTextWithGemini(2, data.text);
-      return;
-    }
-
-    if (data.type === "examiner_audio" && data.audioBase64) {
-      await playTask2ExaminerAudio(data.audioBase64, data.mimeType);
       return;
     }
 
@@ -619,6 +599,7 @@ function buildRecognizer(task) {
   recognizer.onstart = () => {
     activeRecognitionTask = task;
     clearTimeUp(task);
+    setRecordingIndicator(task, true);
     if (task === 2 && isTask2VertexMode()) {
       vertexLoopState[2].sawSpeechThisCycle = false;
     }
@@ -671,6 +652,7 @@ function buildRecognizer(task) {
     }
 
     if (event.error === "audio-capture") {
+      setRecordingIndicator(task, false);
       if (task === 2 && isTask2VertexMode()) keepListeningTask[2] = false;
       if (task === 2) clearTask2SilenceTimer();
       speakingStatus[task].textContent = "Mic not detected";
@@ -678,6 +660,7 @@ function buildRecognizer(task) {
     }
 
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      setRecordingIndicator(task, false);
       if (task === 2 && isTask2VertexMode()) keepListeningTask[2] = false;
       if (task === 2) clearTask2SilenceTimer();
       speakingStatus[task].textContent = "Mic permission blocked";
@@ -695,6 +678,7 @@ function buildRecognizer(task) {
     }
 
     if (noSpeechCount[task] >= 3 && !(task === 2 && isTask2VertexMode() && keepListeningTask[2])) {
+      setRecordingIndicator(task, false);
       speakingStatus[task].textContent = "Stopped: no speech captured";
       noSpeechCount[task] = 0;
       if (activeRecognitionTask === task) activeRecognitionTask = null;
@@ -710,6 +694,7 @@ function buildRecognizer(task) {
     if (task === 2 && isTask2VertexMode() && keepListeningTask[2]) {
       vertexLoopState[2].reconnectAttempts += 1;
       if (vertexLoopState[2].reconnectAttempts > 12) {
+        setRecordingIndicator(task, false);
         keepListeningTask[2] = false;
         clearTask2SilenceTimer();
         speakingStatus[2].textContent = "Recording stopped. Click Start again and speak immediately.";
@@ -728,6 +713,7 @@ function buildRecognizer(task) {
       return;
     }
 
+    setRecordingIndicator(task, false);
     speakingStatus[task].textContent = "Idle";
   };
 
@@ -840,6 +826,7 @@ async function startServerTranscription(task) {
     };
 
     recorder.onstop = async () => {
+      setRecordingIndicator(task, false);
       clearRecordingTimeout(task);
       const chunkList = mediaChunks[task];
       mediaChunks[task] = [];
@@ -877,8 +864,10 @@ async function startServerTranscription(task) {
     };
 
     recorder.start(isTask2VertexLiveMode ? 10000 : 250);
+    setRecordingIndicator(task, true);
     armRecordingTimeout(task);
   } catch (_error) {
+    setRecordingIndicator(task, false);
     speakingStatus[task].textContent = "Mic permission blocked";
   }
 }
@@ -886,6 +875,7 @@ async function startServerTranscription(task) {
 function stopServerTranscription(task, fromTimeout = false) {
   const recorder = mediaRecorders[task];
   if (!recorder || recorder.state !== "recording") return;
+  setRecordingIndicator(task, false);
   clearRecordingTimeout(task);
   if (!fromTimeout) speakingStatus[task].textContent = "Stopping...";
   recorder.stop();
@@ -948,6 +938,7 @@ function startRecognition(task) {
 }
 
 function stopRecognition(task, fromTimeout = false) {
+  setRecordingIndicator(task, false);
   keepListeningTask[task] = false;
   if (task === 2) {
     vertexLoopState[2].sawSpeechThisCycle = false;
@@ -1036,6 +1027,8 @@ function bindButtons() {
 }
 
 function init() {
+  setRecordingIndicator(2, false);
+  setRecordingIndicator(3, false);
   ttsProviderSelect.value = "gemini";
   sttProviderSelect.value = "server";
   setTask2Question(0);

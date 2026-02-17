@@ -64,6 +64,12 @@ def parse_response_text(response: Any) -> str:
 def build_vertex_error_payload(err: Exception) -> Dict[str, Any]:
     message = str(err)
     hint = ""
+    model_lower = MODEL.lower()
+    if "tts" in model_lower:
+      hint = (
+          "TASK2_VERTEX_MODEL is set to a TTS model. For Task 2 live interaction use a text model, "
+          "for example gemini-2.5-flash."
+      )
     if "FAILED_PRECONDITION" in message or "Precondition check failed" in message:
       hint = (
           "Model/region precondition failed. Verify TASK2_VERTEX_MODEL exists in VERTEX_LOCATION "
