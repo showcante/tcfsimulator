@@ -761,8 +761,22 @@ async function startServerTranscription(task) {
     clearTimeUp(task);
     speakingStatus[task].textContent = "Listening";
 
-    recorder.ondataavailable = (event) => {
-      if (event.data && event.data.size > 0) mediaChunks[task].push(event.data);
+    const isTask2VertexLiveMode = task === 2 && isTask2VertexMode();
+
+    recorder.ondataavailable = async (event) => {
+      if (!event.data || event.data.size === 0) return;
+
+      if (isTask2VertexLiveMode) {
+        try {
+          await transcribeBlobWithServer(task, event.data);
+        } catch (error) {
+          speakingStatus[task].textContent = "STT error";
+          alert(`Transcription failed: ${error.message}`);
+        }
+        return;
+      }
+
+      mediaChunks[task].push(event.data);
     };
 
     recorder.onstop = async () => {
@@ -777,6 +791,15 @@ async function startServerTranscription(task) {
 
       mediaRecorders[task] = null;
       if (activeRecognitionTask === task) activeRecognitionTask = null;
+
+      if (isTask2VertexLiveMode) {
+        if (timedOutTask[task]) {
+          showTimeUp(task);
+        } else {
+          speakingStatus[task].textContent = "Idle";
+        }
+        return;
+      }
 
       if (!chunkList.length) {
         speakingStatus[task].textContent = "No audio captured";
@@ -793,7 +816,7 @@ async function startServerTranscription(task) {
       }
     };
 
-    recorder.start(250);
+    recorder.start(isTask2VertexLiveMode ? 5000 : 250);
     armRecordingTimeout(task);
   } catch (_error) {
     speakingStatus[task].textContent = "Mic permission blocked";
@@ -817,8 +840,8 @@ function startRecognition(task) {
     armTask2SilenceTimer();
   }
 
-  if (task === 2 && isTask2VertexMode() && isServerSttSelected()) {
-    sttProviderSelect.value = "browser";
+  if (task === 2 && isTask2VertexMode() && !isServerSttSelected()) {
+    sttProviderSelect.value = "server";
   }
 
   if (isServerSttSelected()) {
