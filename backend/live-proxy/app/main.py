@@ -1,6 +1,8 @@
 import base64
+import io
 import json
 import os
+import wave
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -72,6 +74,21 @@ def parse_response(response: Any) -> Tuple[str, str, str]:
         if inline_data and not audio_b64:
             audio_b64 = to_b64(getattr(inline_data, "data", None))
             audio_mime = getattr(inline_data, "mime_type", None) or audio_mime
+
+    if audio_b64 and "audio/pcm" in audio_mime.lower():
+        try:
+            pcm_bytes = base64.b64decode(audio_b64)
+            wav_buffer = io.BytesIO()
+            with wave.open(wav_buffer, "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)  # PCM16
+                wav_file.setframerate(24000)
+                wav_file.writeframes(pcm_bytes)
+            audio_b64 = base64.b64encode(wav_buffer.getvalue()).decode("utf-8")
+            audio_mime = "audio/wav"
+        except Exception:
+            # Keep original payload on conversion failure.
+            pass
 
     return " ".join(text_parts).strip(), audio_b64, audio_mime
 
