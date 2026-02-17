@@ -95,6 +95,8 @@ const task2NativeAudioState = {
 let task2CaptionRecognizer = null;
 let task2CaptionActive = false;
 let task2CaptionRestartTimer = null;
+let task2AwaitingResponseTimer = null;
+let task2LastExaminerResponseAt = 0;
 const task2ExaminerAudioBuffer = {
   chunks: [],
   mimeType: "audio/pcm;rate=24000",
@@ -161,6 +163,23 @@ function clearTask2CaptionRestart() {
     clearTimeout(task2CaptionRestartTimer);
     task2CaptionRestartTimer = null;
   }
+}
+
+function clearTask2AwaitingResponseTimer() {
+  if (task2AwaitingResponseTimer) {
+    clearTimeout(task2AwaitingResponseTimer);
+    task2AwaitingResponseTimer = null;
+  }
+}
+
+function armTask2AwaitingResponseTimer() {
+  clearTask2AwaitingResponseTimer();
+  task2AwaitingResponseTimer = setTimeout(() => {
+    if (!task2LiveSocket || task2LiveSocket.readyState !== WebSocket.OPEN) return;
+    const since = Date.now() - task2LastExaminerResponseAt;
+    if (since < 5000) return;
+    sendTask2LiveText("Bonjour, on peut commencer l'entretien ?");
+  }, 8000);
 }
 
 function b64ToBytes(base64) {
@@ -598,7 +617,9 @@ function startTask2CaptionRecognition() {
       }
       if (finalText.trim()) {
         const tag = currentLang() === "fr" ? "Candidat" : "Candidate";
-        transcriptFields[2].value = `${transcriptFields[2].value}\n[${tag}] ${finalText.trim()}`.trim() + "\n";
+        const sentence = finalText.trim();
+        transcriptFields[2].value = `${transcriptFields[2].value}\n[${tag}] ${sentence}`.trim() + "\n";
+        sendTask2LiveText(sentence);
       }
     };
 
@@ -634,6 +655,7 @@ function startTask2CaptionRecognition() {
 function stopTask2CaptionRecognition() {
   task2CaptionActive = false;
   clearTask2CaptionRestart();
+  clearTask2AwaitingResponseTimer();
   if (!task2CaptionRecognizer) return;
   try {
     task2CaptionRecognizer.stop();
@@ -701,6 +723,7 @@ function connectTask2Live() {
   task2LiveSocket.onopen = () => {
     resetTask2ExaminerAudioBuffer();
     task2ReconnectInProgress = false;
+    task2LastExaminerResponseAt = Date.now();
     startTask2WsHeartbeat();
     setTask2LiveStatusText("live_connected");
     task2SessionStarted = false;
@@ -721,6 +744,8 @@ function connectTask2Live() {
     }
 
     if (data.type === "examiner_text" && data.text) {
+      task2LastExaminerResponseAt = Date.now();
+      clearTask2AwaitingResponseTimer();
       const tag = currentLang() === "fr" ? "Examinateur" : "Examiner";
       transcriptFields[2].value = `${transcriptFields[2].value}\n[${tag}] ${data.text}`.trim() + "\n";
       speakingStatus[2].textContent = data.text;
@@ -734,6 +759,8 @@ function connectTask2Live() {
     }
 
     if (data.type === "examiner_audio" && data.audioBase64) {
+      task2LastExaminerResponseAt = Date.now();
+      clearTask2AwaitingResponseTimer();
       speakingStatus[2].textContent = "Examiner speaking...";
       queueTask2ExaminerAudioChunk(data.audioBase64, data.mimeType);
       return;
@@ -776,6 +803,7 @@ function connectTask2Live() {
 
 function disconnectTask2Live() {
   clearTask2WsHeartbeat();
+  clearTask2AwaitingResponseTimer();
   resetTask2ExaminerAudioBuffer();
   stopTask2CaptionRecognition();
   stopTask2NativeAudioCapture(true);
@@ -831,7 +859,7 @@ async function startTask2NativeAudioCapture() {
 
     const context = new AudioCtx({ sampleRate: 16000 });
     const source = context.createMediaStreamSource(stream);
-    const processor = context.createScriptProcessor(2048, 1, 1);
+    const processor = context.createScriptProcessor(1024, 1, 1);
     const muteGain = context.createGain();
     muteGain.gain.value = 0;
 
@@ -1483,6 +1511,7 @@ function startRecognition(task) {
           language: getRecognitionLanguage(),
         })
       );
+      armTask2AwaitingResponseTimer();
     }
     startTask2NativeAudioCapture().then(() => {
       if (task2NativeAudioState.isActive) {

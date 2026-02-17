@@ -31,6 +31,7 @@ Règles :
 4. Réponds toujours sur un ton professionnel mais accueillant.
 5. Reste strictement dans le scénario donné par la consigne.
 6. Réponds avec 1 à 3 phrases utiles, puis termine par une question de relance.
+7. Si le candidat dit seulement bonjour ou une phrase incomplète, réponds quand même et guide la conversation.
 """.strip()
 
 client: Optional[genai.Client] = None
@@ -216,7 +217,8 @@ async def task2_live(ws: WebSocket) -> None:
                         prompt_context = (message.get("prompt") or "").strip()
                         seed = (
                             "Commence l'interaction maintenant. "
-                            "Salue le candidat puis pose une question courte liée à cette consigne:\n"
+                            "Salue le candidat, donne un premier détail concret lié à la consigne, "
+                            "puis pose une question courte pour faire parler le candidat:\n"
                             f"{prompt_context or '(aucune consigne)'}"
                         )
                         await session.send_client_content(
