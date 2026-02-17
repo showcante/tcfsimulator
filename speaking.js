@@ -92,6 +92,9 @@ const task2NativeAudioState = {
   muteGain: null,
   isActive: false,
 };
+let task2CaptionRecognizer = null;
+let task2CaptionActive = false;
+let task2CaptionRestartTimer = null;
 const task2ExaminerAudioBuffer = {
   chunks: [],
   mimeType: "audio/pcm;rate=24000",
@@ -150,6 +153,13 @@ function clearTask2InterimTimer() {
   if (task2InterimState.timer) {
     clearTimeout(task2InterimState.timer);
     task2InterimState.timer = null;
+  }
+}
+
+function clearTask2CaptionRestart() {
+  if (task2CaptionRestartTimer) {
+    clearTimeout(task2CaptionRestartTimer);
+    task2CaptionRestartTimer = null;
   }
 }
 
@@ -567,6 +577,71 @@ async function playTask2LiveModelAudio(audioBase64, mimeType = "audio/pcm;rate=2
   }
 }
 
+function startTask2CaptionRecognition() {
+  if (!SpeechRecognition) return;
+  if (task2CaptionActive) return;
+
+  if (!task2CaptionRecognizer) {
+    task2CaptionRecognizer = new SpeechRecognition();
+    task2CaptionRecognizer.lang = getRecognitionLanguage();
+    task2CaptionRecognizer.continuous = true;
+    task2CaptionRecognizer.interimResults = true;
+
+    task2CaptionRecognizer.onresult = (event) => {
+      let finalText = "";
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const t = (event.results[i][0]?.transcript || "").trim();
+        if (!t) continue;
+        if (event.results[i].isFinal) {
+          finalText += `${t} `;
+        }
+      }
+      if (finalText.trim()) {
+        const tag = currentLang() === "fr" ? "Candidat" : "Candidate";
+        transcriptFields[2].value = `${transcriptFields[2].value}\n[${tag}] ${finalText.trim()}`.trim() + "\n";
+      }
+    };
+
+    task2CaptionRecognizer.onerror = (event) => {
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        task2CaptionActive = false;
+      }
+    };
+
+    task2CaptionRecognizer.onend = () => {
+      if (!task2CaptionActive) return;
+      clearTask2CaptionRestart();
+      task2CaptionRestartTimer = setTimeout(() => {
+        if (!task2CaptionActive) return;
+        try {
+          task2CaptionRecognizer.start();
+        } catch (_error) {
+          // ignore duplicate-start race
+        }
+      }, 250);
+    };
+  }
+
+  task2CaptionActive = true;
+  task2CaptionRecognizer.lang = getRecognitionLanguage();
+  try {
+    task2CaptionRecognizer.start();
+  } catch (_error) {
+    // ignore duplicate-start race
+  }
+}
+
+function stopTask2CaptionRecognition() {
+  task2CaptionActive = false;
+  clearTask2CaptionRestart();
+  if (!task2CaptionRecognizer) return;
+  try {
+    task2CaptionRecognizer.stop();
+  } catch (_error) {
+    // ignore stop race
+  }
+}
+
 function resetTask2ExaminerAudioBuffer() {
   task2ExaminerAudioBuffer.chunks = [];
   task2ExaminerAudioBuffer.mimeType = "audio/pcm;rate=24000";
@@ -652,6 +727,12 @@ function connectTask2Live() {
       return;
     }
 
+    if (data.type === "candidate_text_live" && data.text) {
+      const tag = currentLang() === "fr" ? "Candidat" : "Candidate";
+      transcriptFields[2].value = `${transcriptFields[2].value}\n[${tag}] ${data.text}`.trim() + "\n";
+      return;
+    }
+
     if (data.type === "examiner_audio" && data.audioBase64) {
       speakingStatus[2].textContent = "Examiner speaking...";
       queueTask2ExaminerAudioChunk(data.audioBase64, data.mimeType);
@@ -696,6 +777,7 @@ function connectTask2Live() {
 function disconnectTask2Live() {
   clearTask2WsHeartbeat();
   resetTask2ExaminerAudioBuffer();
+  stopTask2CaptionRecognition();
   stopTask2NativeAudioCapture(true);
   task2SessionStarted = false;
   if (task2LiveSocket) {
@@ -1402,7 +1484,11 @@ function startRecognition(task) {
         })
       );
     }
-    startTask2NativeAudioCapture();
+    startTask2NativeAudioCapture().then(() => {
+      if (task2NativeAudioState.isActive) {
+        startTask2CaptionRecognition();
+      }
+    });
     return;
   }
 
@@ -1447,6 +1533,7 @@ function startRecognition(task) {
 function stopRecognition(task, fromTimeout = false) {
   clearRecorderFlushTimer(task);
   if (task === 2 && isTask2VertexMode()) {
+    stopTask2CaptionRecognition();
     stopTask2NativeAudioCapture(fromTimeout);
     clearTask2InterimTimer();
     task2InterimState.lastRawInterim = "";

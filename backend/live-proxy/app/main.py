@@ -121,6 +121,18 @@ async def health() -> Dict[str, Any]:
 async def stream_vertex_to_browser(session: Any, ws: WebSocket) -> None:
     async for message in session.receive():
         try:
+            input_tx = getattr(message, "input_transcription", None)
+            if input_tx:
+                tx_text = getattr(input_tx, "text", None) or ""
+                if tx_text.strip():
+                    await ws.send_json({"type": "candidate_text_live", "text": tx_text.strip()})
+
+            output_tx = getattr(message, "output_transcription", None)
+            if output_tx:
+                tx_text = getattr(output_tx, "text", None) or ""
+                if tx_text.strip():
+                    await ws.send_json({"type": "examiner_text", "text": tx_text.strip()})
+
             if getattr(message, "text", None):
                 await ws.send_json({"type": "examiner_text", "text": message.text})
 
