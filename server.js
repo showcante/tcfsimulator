@@ -145,34 +145,51 @@ async function handleGeminiTts(req, res) {
         return;
       }
 
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-      const requestPayload = {
-        contents: [{ parts: [{ text }] }],
-        generationConfig: {
-          responseModalities: ["AUDIO"],
-          speechConfig: {
-            languageCode: "fr-CA",
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName,
+      const modelsToTry = [GEMINI_MODEL, "gemini-2.5-flash-preview-tts"];
+      let geminiResponse = null;
+      let lastErrorText = "";
+
+      for (const modelName of modelsToTry) {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
+        const requestPayload = {
+          contents: [
+            {
+              parts: [
+                {
+                  text: `Lis ce texte exactement, sans ajouter de mots.\nTexte:\n${text}`,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            temperature: 0,
+            speechConfig: {
+              languageCode: "fr-CA",
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName,
+                },
               },
             },
           },
-        },
-      };
+        };
 
-      const geminiResponse = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": GEMINI_API_KEY,
-        },
-        body: JSON.stringify(requestPayload),
-      });
+        geminiResponse = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY,
+          },
+          body: JSON.stringify(requestPayload),
+        });
+
+        if (geminiResponse.ok) break;
+        lastErrorText = await geminiResponse.text();
+      }
 
       if (!geminiResponse.ok) {
-        const errorText = await geminiResponse.text();
-        sendJson(res, 502, { error: buildGeminiErrorMessage(errorText) });
+        sendJson(res, 502, { error: buildGeminiErrorMessage(lastErrorText) });
         return;
       }
 

@@ -73,6 +73,13 @@ const mediaStreams = {
   2: null,
   3: null,
 };
+const recorderFlushTimers = {
+  2: null,
+  3: null,
+};
+const task2LiveUtteranceBuffer = {
+  text: "",
+};
 const emptyServerSttChunks = {
   2: 0,
   3: 0,
@@ -111,6 +118,13 @@ function clearTask2SilenceTimer() {
   if (task2SilenceTimer) {
     clearTimeout(task2SilenceTimer);
     task2SilenceTimer = null;
+  }
+}
+
+function clearRecorderFlushTimer(task) {
+  if (recorderFlushTimers[task]) {
+    clearInterval(recorderFlushTimers[task]);
+    recorderFlushTimers[task] = null;
   }
 }
 
@@ -414,8 +428,7 @@ async function playTextWithGemini(task, text) {
 
     speakingStatus[task].textContent = "Idle";
   } catch (error) {
-    speakingStatus[task].textContent = "Gemini TTS error";
-    alert(`Gemini TTS failed: ${error.message}`);
+    speakingStatus[task].textContent = "Examiner voice unavailable (text only)";
   }
 }
 
@@ -503,6 +516,26 @@ function sendTask2LiveText(text) {
   );
   speakingStatus[2].textContent = uiText("live_sent");
   return true;
+}
+
+function flushTask2LiveUtterance() {
+  const buffered = task2LiveUtteranceBuffer.text.trim();
+  if (!buffered) return;
+  task2LiveUtteranceBuffer.text = "";
+  sendTask2LiveText(buffered);
+  armTask2SilenceTimer();
+}
+
+function handleTask2LiveTranscriptChunk(text, forceFlush = false) {
+  const chunk = (text || "").trim();
+  if (!chunk) return;
+  task2LiveUtteranceBuffer.text = `${task2LiveUtteranceBuffer.text} ${chunk}`.trim();
+
+  const words = task2LiveUtteranceBuffer.text.split(/\s+/).filter(Boolean).length;
+  const hasSentenceEnd = /[.!?]\s*$/.test(task2LiveUtteranceBuffer.text);
+  if (forceFlush || hasSentenceEnd || words >= 10) {
+    flushTask2LiveUtterance();
+  }
 }
 
 function sendTask2TranscriptToLive() {
@@ -850,7 +883,7 @@ async function transcribeBlobWithServer(task, blob) {
     emptyServerSttChunks[task] = 0;
     transcriptFields[task].value = `${transcriptFields[task].value}${text} `.trim() + " ";
     if (task === 2 && isTask2VertexMode()) {
-      sendTask2LiveText(text);
+      handleTask2LiveTranscriptChunk(text);
       armTask2SilenceTimer();
     }
     if (timedOutTask[task]) {
@@ -949,6 +982,8 @@ async function startServerTranscription(task) {
       if (activeRecognitionTask === task) activeRecognitionTask = null;
 
       if (isTask2VertexLiveMode) {
+        clearRecorderFlushTimer(task);
+        flushTask2LiveUtterance();
         if (timedOutTask[task]) {
           showTimeUp(task);
         } else {
@@ -972,7 +1007,19 @@ async function startServerTranscription(task) {
       }
     };
 
-    recorder.start(isTask2VertexLiveMode ? 6000 : 250);
+    recorder.start(isTask2VertexLiveMode ? 2000 : 250);
+    if (isTask2VertexLiveMode) {
+      clearRecorderFlushTimer(task);
+      recorderFlushTimers[task] = setInterval(() => {
+        if (recorder.state === "recording") {
+          try {
+            recorder.requestData();
+          } catch (_error) {
+            // ignore requestData race
+          }
+        }
+      }, 2200);
+    }
     setRecordingIndicator(task, true);
     armRecordingTimeout(task);
   } catch (_error) {
@@ -985,6 +1032,10 @@ async function startServerTranscription(task) {
 function stopServerTranscription(task, fromTimeout = false) {
   const recorder = mediaRecorders[task];
   if (!recorder || recorder.state !== "recording") return;
+  clearRecorderFlushTimer(task);
+  if (task === 2 && isTask2VertexMode()) {
+    flushTask2LiveUtterance();
+  }
   setRecordingIndicator(task, false);
   stopMicMeter(task);
   clearRecordingTimeout(task);
@@ -1049,6 +1100,10 @@ function startRecognition(task) {
 }
 
 function stopRecognition(task, fromTimeout = false) {
+  clearRecorderFlushTimer(task);
+  if (task === 2 && isTask2VertexMode()) {
+    flushTask2LiveUtterance();
+  }
   setRecordingIndicator(task, false);
   stopMicMeter(task);
   keepListeningTask[task] = false;

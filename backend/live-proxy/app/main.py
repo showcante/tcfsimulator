@@ -26,7 +26,8 @@ Règles :
 2. Attends que le candidat pose des questions (prix, horaires, douches, etc.).
 3. Si le candidat hésite trop longtemps, relance-le gentiment.
 4. Réponds toujours sur un ton professionnel mais accueillant.
-5. Limite ta réponse à quelques phrases naturelles.
+5. Reste strictement dans le scénario donné par la consigne.
+6. Réponds avec 1 à 3 phrases utiles, puis termine par une question de relance.
 """.strip()
 
 client: Optional[genai.Client] = None
@@ -126,7 +127,7 @@ async def task2_live(ws: WebSocket) -> None:
     await ws.accept()
     await ws.send_json({"type": "ready", "message": "Task 2 live socket connected"})
 
-    history: List[str] = []
+    history_turns: List[Dict[str, str]] = []
 
     try:
         while True:
@@ -161,15 +162,18 @@ async def task2_live(ws: WebSocket) -> None:
                 continue
 
             prompt_context = (message.get("prompt") or "").strip()
-            history.append(candidate_text)
-            history = history[-6:]
-
-            conversation_excerpt = "\n".join([f"- {item}" for item in history])
+            history_turns.append({"role": "CANDIDAT", "text": candidate_text})
+            history_turns = history_turns[-12:]
+            conversation_excerpt = "\n".join(
+                [f"{turn['role']}: {turn['text']}" for turn in history_turns]
+            )
             request_text = (
                 f"{SYSTEM_INSTRUCTION}\n\n"
                 f"Contexte de la tâche 2:\n{prompt_context or '(aucun)'}\n\n"
-                f"Historique candidat (récent):\n{conversation_excerpt}\n\n"
-                f"Réponds maintenant comme examinateur avec une relance courte."
+                f"Conversation en cours:\n{conversation_excerpt}\n\n"
+                "Réponds maintenant comme examinateur TCF.\n"
+                "N'invente pas un nouveau scénario.\n"
+                "Reste cohérent avec la dernière question du candidat."
             )
 
             try:
@@ -191,6 +195,8 @@ async def task2_live(ws: WebSocket) -> None:
             if not examiner_text:
                 examiner_text = "Pouvez-vous reformuler votre question, s'il vous plait ?"
             if examiner_text:
+                history_turns.append({"role": "EXAMINATEUR", "text": examiner_text})
+                history_turns = history_turns[-12:]
                 await ws.send_json({"type": "examiner_text", "text": examiner_text})
     except WebSocketDisconnect:
         return
