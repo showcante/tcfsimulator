@@ -26,6 +26,14 @@ const recordingIndicators = {
   2: document.getElementById("rec-indicator-2"),
   3: document.getElementById("rec-indicator-3"),
 };
+const micMeterFills = {
+  2: document.getElementById("mic-meter-fill-2"),
+  3: document.getElementById("mic-meter-fill-3"),
+};
+const micMeterValues = {
+  2: document.getElementById("mic-meter-value-2"),
+  3: document.getElementById("mic-meter-value-3"),
+};
 
 const ttsProviderSelect = document.getElementById("tts-provider");
 const geminiVoiceSelect = document.getElementById("gemini-voice");
@@ -93,6 +101,11 @@ const vertexLoopState = {
   },
 };
 let task2SilenceTimer = null;
+let task2LastVoiceActivityAt = 0;
+const micMeters = {
+  2: { audioContext: null, analyser: null, source: null, rafId: null, data: null },
+  3: { audioContext: null, analyser: null, source: null, rafId: null, data: null },
+};
 
 function clearTask2SilenceTimer() {
   if (task2SilenceTimer) {
@@ -284,6 +297,89 @@ function setRecordingIndicator(task, isActive) {
   const indicator = recordingIndicators[task];
   if (!indicator) return;
   indicator.classList.toggle("hidden", !isActive);
+}
+
+function updateMicMeter(task, levelRatio) {
+  const fill = micMeterFills[task];
+  const value = micMeterValues[task];
+  if (!fill || !value) return;
+  const clamped = Math.max(0, Math.min(1, levelRatio || 0));
+  const percent = Math.round(clamped * 100);
+  fill.style.width = `${percent}%`;
+  value.textContent = `${percent}%`;
+}
+
+function stopMicMeter(task) {
+  const meter = micMeters[task];
+  if (!meter) return;
+  if (meter.rafId) {
+    cancelAnimationFrame(meter.rafId);
+    meter.rafId = null;
+  }
+  if (meter.source) {
+    try {
+      meter.source.disconnect();
+    } catch (_error) {}
+    meter.source = null;
+  }
+  if (meter.analyser) {
+    try {
+      meter.analyser.disconnect();
+    } catch (_error) {}
+    meter.analyser = null;
+  }
+  if (meter.audioContext) {
+    meter.audioContext.close().catch(() => {});
+    meter.audioContext = null;
+  }
+  meter.data = null;
+  updateMicMeter(task, 0);
+}
+
+function startMicMeter(task, stream) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx || !stream) return;
+  stopMicMeter(task);
+
+  const meter = micMeters[task];
+  const context = new AudioCtx();
+  const source = context.createMediaStreamSource(stream);
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = 0.75;
+  const data = new Uint8Array(analyser.fftSize);
+
+  source.connect(analyser);
+  meter.audioContext = context;
+  meter.source = source;
+  meter.analyser = analyser;
+  meter.data = data;
+
+  const loop = () => {
+    if (!meter.analyser || !meter.data) return;
+    meter.analyser.getByteTimeDomainData(meter.data);
+    let sumSquares = 0;
+    for (let i = 0; i < meter.data.length; i += 1) {
+      const normalized = (meter.data[i] - 128) / 128;
+      sumSquares += normalized * normalized;
+    }
+    const rms = Math.sqrt(sumSquares / meter.data.length);
+    const scaled = Math.min(1, rms * 8);
+    updateMicMeter(task, scaled);
+
+    if (task === 2 && isTask2VertexMode() && keepListeningTask[2] && scaled > 0.06) {
+      const now = Date.now();
+      if (now - task2LastVoiceActivityAt > 1200) {
+        task2LastVoiceActivityAt = now;
+        vertexLoopState[2].promptedSilence = false;
+        armTask2SilenceTimer();
+      }
+    }
+
+    meter.rafId = requestAnimationFrame(loop);
+  };
+
+  meter.rafId = requestAnimationFrame(loop);
 }
 
 async function playTextWithGemini(task, text) {
@@ -767,8 +863,11 @@ async function transcribeBlobWithServer(task, blob) {
     if (timedOutTask[task]) {
       showTimeUp(task);
     } else {
+      const audioLooksPresent = (blob?.size || 0) > 5000;
       if (emptyServerSttChunks[task] >= 3) {
-        speakingStatus[task].textContent = "No speech recognized (check mic input device and speak closer)";
+        speakingStatus[task].textContent = audioLooksPresent
+          ? "Audio captured, but words were not recognized. Try slower speech and set language to French (Canada)."
+          : "No speech recognized (check mic input device and speak closer)";
       } else {
         speakingStatus[task].textContent = "Listening";
       }
@@ -790,8 +889,17 @@ async function startServerTranscription(task) {
   }
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        sampleRate: 48000,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
     mediaStreams[task] = stream;
+    startMicMeter(task, stream);
     mediaChunks[task] = [];
 
     const recorderOptions = {};
@@ -827,6 +935,7 @@ async function startServerTranscription(task) {
 
     recorder.onstop = async () => {
       setRecordingIndicator(task, false);
+      stopMicMeter(task);
       clearRecordingTimeout(task);
       const chunkList = mediaChunks[task];
       mediaChunks[task] = [];
@@ -863,11 +972,12 @@ async function startServerTranscription(task) {
       }
     };
 
-    recorder.start(isTask2VertexLiveMode ? 10000 : 250);
+    recorder.start(isTask2VertexLiveMode ? 3000 : 250);
     setRecordingIndicator(task, true);
     armRecordingTimeout(task);
   } catch (_error) {
     setRecordingIndicator(task, false);
+    stopMicMeter(task);
     speakingStatus[task].textContent = "Mic permission blocked";
   }
 }
@@ -876,6 +986,7 @@ function stopServerTranscription(task, fromTimeout = false) {
   const recorder = mediaRecorders[task];
   if (!recorder || recorder.state !== "recording") return;
   setRecordingIndicator(task, false);
+  stopMicMeter(task);
   clearRecordingTimeout(task);
   if (!fromTimeout) speakingStatus[task].textContent = "Stopping...";
   recorder.stop();
@@ -939,6 +1050,7 @@ function startRecognition(task) {
 
 function stopRecognition(task, fromTimeout = false) {
   setRecordingIndicator(task, false);
+  stopMicMeter(task);
   keepListeningTask[task] = false;
   if (task === 2) {
     vertexLoopState[2].sawSpeechThisCycle = false;
@@ -1029,6 +1141,8 @@ function bindButtons() {
 function init() {
   setRecordingIndicator(2, false);
   setRecordingIndicator(3, false);
+  updateMicMeter(2, 0);
+  updateMicMeter(3, 0);
   ttsProviderSelect.value = "gemini";
   sttProviderSelect.value = "server";
   setTask2Question(0);

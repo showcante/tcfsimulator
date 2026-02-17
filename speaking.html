@@ -127,6 +127,13 @@
             <button type="button" data-action="copy-task2-eval" data-i18n="btn_copy_task2_eval">Copy Task 2 For Evaluation</button>
             <button type="button" data-action="task2-send-live" data-i18n="btn_task2_send_live">Send Last Transcript To Examiner</button>
           </div>
+          <div class="mic-meter-wrap">
+            <span class="mic-meter-label" data-i18n="mic_input_level">Mic input level</span>
+            <div class="mic-meter-track" aria-hidden="true">
+              <div class="mic-meter-fill" id="mic-meter-fill-2"></div>
+            </div>
+            <span class="mic-meter-value" id="mic-meter-value-2">0%</span>
+          </div>
           <audio id="prompt-audio-2" controls preload="none"></audio>
           <label for="transcript-speaking-2" data-i18n="label_transcript">Transcript</label>
           <textarea id="transcript-speaking-2" rows="6" placeholder="Your speaking transcript appears here..." data-i18n-placeholder="speaking_transcript_placeholder"></textarea>
@@ -155,6 +162,13 @@
             <button type="button" data-action="stop-rec" data-task="3" data-i18n="btn_stop_recording">Stop Recording</button>
             <span class="recording-indicator hidden" id="rec-indicator-3" data-i18n="recording_active">Recording</span>
             <button type="button" data-action="copy-speaking" data-task="3" data-i18n="btn_copy_transcript">Copy Transcript</button>
+          </div>
+          <div class="mic-meter-wrap">
+            <span class="mic-meter-label" data-i18n="mic_input_level">Mic input level</span>
+            <div class="mic-meter-track" aria-hidden="true">
+              <div class="mic-meter-fill" id="mic-meter-fill-3"></div>
+            </div>
+            <span class="mic-meter-value" id="mic-meter-value-3">0%</span>
           </div>
           <audio id="prompt-audio-3" controls preload="none"></audio>
           <label for="transcript-speaking-3" data-i18n="label_transcript">Transcript</label>

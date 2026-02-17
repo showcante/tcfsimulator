@@ -389,6 +389,36 @@ body.lang-fr .home-hero-copy {
   display: none;
 }
 
+.mic-meter-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.35rem 0 0.7rem;
+}
+
+.mic-meter-label,
+.mic-meter-value {
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.mic-meter-track {
+  flex: 1;
+  max-width: 260px;
+  height: 8px;
+  border-radius: 999px;
+  background: #dbe3e9;
+  overflow: hidden;
+}
+
+.mic-meter-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #16a34a 0%, #f59e0b 70%, #dc2626 100%);
+  transition: width 100ms linear;
+}
+
 @keyframes recPulse {
   0% {
     opacity: 1;
