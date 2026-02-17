@@ -171,7 +171,8 @@ async def task2_live(ws: WebSocket) -> None:
 
             try:
                 cfg = types.GenerateContentConfig(
-                    response_modalities=["AUDIO", "TEXT"],
+                    # TTS models only support AUDIO output.
+                    response_modalities=["AUDIO"],
                     speech_config=types.SpeechConfig(
                         voice_config=types.VoiceConfig(
                             prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=VOICE)
