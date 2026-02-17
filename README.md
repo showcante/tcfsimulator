@@ -71,3 +71,36 @@ If the platform cannot run backend endpoints, speaking TTS/STT features will not
 - Google Speech-to-Text in this code uses synchronous recognition (`speech:recognize`) and may reject long audio with:
   - `Sync input too long... use LongRunningRecognize`
 - For long recordings, update backend to use long-running recognition workflow.
+
+## Task 2 Advanced Vertex Mode (Optional)
+Task 2 can use a dedicated WebSocket backend on Cloud Run for a more advanced examiner-style interaction. Task 3 can stay on the current flow.
+
+### Backend files in this repo
+- `backend/live-proxy/app/main.py`
+- `backend/live-proxy/requirements.txt`
+- `backend/live-proxy/Dockerfile`
+
+### Cloud Run deploy example
+```bash
+cd /Users/user/Library/CloudStorage/OneDrive-Personnel/Study/TCF_app/backend/live-proxy
+
+gcloud run deploy tcf-task2-live \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --service-account YOUR_SERVICE_ACCOUNT@YOUR_PROJECT_ID.iam.gserviceaccount.com \
+  --set-env-vars GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID,VERTEX_LOCATION=us-central1,TASK2_VERTEX_MODEL=gemini-2.5-flash,TASK2_VOICE_NAME=Aoede
+```
+
+Optional hardening env vars:
+- `ALLOWED_ORIGINS=https://your-vercel-domain.vercel.app,http://localhost:3000`
+- `TASK2_LIVE_SHARED_SECRET=your_secret_token`
+
+### Frontend usage
+1. Open `/speaking.html`.
+2. In `Prompt Audio Settings`, set **Task 2 Engine** to `Advanced Vertex (WebSocket)`.
+3. Paste your Cloud Run WebSocket URL:
+   - `wss://<cloud-run-domain>/ws/task2-live`
+   - If you enabled `TASK2_LIVE_SHARED_SECRET`, append `?token=...`.
+4. Click **Connect Task 2 Live**.
+5. Record Task 2, then click **Send Last Transcript To Examiner**.

@@ -27,6 +27,9 @@ const ttsProviderSelect = document.getElementById("tts-provider");
 const geminiVoiceSelect = document.getElementById("gemini-voice");
 const sttLanguageSelect = document.getElementById("stt-language");
 const sttProviderSelect = document.getElementById("stt-provider");
+const task2ModeSelect = document.getElementById("task2-mode");
+const task2LiveUrlInput = document.getElementById("task2-live-url");
+const task2LiveStatus = document.getElementById("task2-live-status");
 const task2QuestionMeta = document.getElementById("task2-question-meta");
 const task2BankMeta = document.getElementById("task2-bank-meta");
 const task3QuestionMeta = document.getElementById("task3-question-meta");
@@ -185,6 +188,7 @@ const task3QuestionBank = [
   "Pensez-vous qu'il soit simple de preserver sa culture d'origine en vivant a l'etranger ? Expliquez pourquoi.",
 ];
 let task3QuestionIndex = 0;
+let task2LiveSocket = null;
 
 function currentLang() {
   const stored = localStorage.getItem("tcf_lang");
@@ -203,6 +207,10 @@ function uiText(key) {
       all: "All",
       reveal: "Reveal Question Text",
       hide: "Hide Question Text",
+      live_connected: "Connected",
+      live_disconnected: "Disconnected",
+      live_connecting: "Connecting...",
+      live_sent: "Sent to examiner",
     },
     fr: {
       question: "Question",
@@ -212,9 +220,141 @@ function uiText(key) {
       all: "Toutes",
       reveal: "Afficher le texte de la question",
       hide: "Masquer le texte de la question",
+      live_connected: "Connecté",
+      live_disconnected: "Déconnecté",
+      live_connecting: "Connexion...",
+      live_sent: "Envoyé à l'examinateur",
     },
   };
   return dict[lang][key] || dict.en[key] || key;
+}
+
+function isTask2VertexMode() {
+  return task2ModeSelect?.value === "vertex";
+}
+
+function setTask2LiveStatusText(key) {
+  if (!task2LiveStatus) return;
+  task2LiveStatus.textContent = uiText(key);
+}
+
+function b64ToUint8Array(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function playTask2ExaminerAudio(audioBase64, mimeType = "audio/wav") {
+  try {
+    const bytes = b64ToUint8Array(audioBase64);
+    const blob = new Blob([bytes], { type: mimeType || "audio/wav" });
+    if (promptAudioUrls[2]) {
+      URL.revokeObjectURL(promptAudioUrls[2]);
+    }
+    promptAudioUrls[2] = URL.createObjectURL(blob);
+    const player = promptAudioPlayers[2];
+    player.src = promptAudioUrls[2];
+    await player.play().catch(() => {});
+  } catch (_error) {
+    // Ignore playback issues; user can still use player controls manually.
+  }
+}
+
+function connectTask2Live() {
+  const wsUrl = (task2LiveUrlInput?.value || "").trim();
+  if (!wsUrl) {
+    alert("Add your Cloud Run WebSocket URL first.");
+    return;
+  }
+  localStorage.setItem("task2_live_ws_url", wsUrl);
+
+  if (task2LiveSocket && task2LiveSocket.readyState === WebSocket.OPEN) {
+    task2LiveSocket.close(1000, "Reconnect");
+  }
+
+  setTask2LiveStatusText("live_connecting");
+  task2LiveSocket = new WebSocket(wsUrl);
+
+  task2LiveSocket.onopen = () => {
+    setTask2LiveStatusText("live_connected");
+  };
+
+  task2LiveSocket.onmessage = async (event) => {
+    let data = null;
+    try {
+      data = JSON.parse(event.data);
+    } catch (_error) {
+      return;
+    }
+
+    if (data.type === "ready") {
+      setTask2LiveStatusText("live_connected");
+      return;
+    }
+
+    if (data.type === "examiner_text" && data.text) {
+      speakingStatus[2].textContent = data.text;
+      return;
+    }
+
+    if (data.type === "examiner_audio" && data.audioBase64) {
+      await playTask2ExaminerAudio(data.audioBase64, data.mimeType);
+      return;
+    }
+
+    if (data.type === "error") {
+      speakingStatus[2].textContent = "Live error";
+      alert(`Task 2 live error: ${data.message || "Unknown error"}`);
+    }
+  };
+
+  task2LiveSocket.onerror = () => {
+    setTask2LiveStatusText("live_disconnected");
+    speakingStatus[2].textContent = "Live socket error";
+  };
+
+  task2LiveSocket.onclose = () => {
+    setTask2LiveStatusText("live_disconnected");
+  };
+}
+
+function disconnectTask2Live() {
+  if (task2LiveSocket) {
+    task2LiveSocket.close(1000, "Client disconnect");
+    task2LiveSocket = null;
+  }
+  setTask2LiveStatusText("live_disconnected");
+}
+
+function sendTask2TranscriptToLive() {
+  if (!isTask2VertexMode()) {
+    alert("Set Task 2 Engine to Advanced Vertex first.");
+    return;
+  }
+  if (!task2LiveSocket || task2LiveSocket.readyState !== WebSocket.OPEN) {
+    alert("Connect Task 2 live first.");
+    return;
+  }
+
+  const text = transcriptFields[2].value.trim();
+  if (!text) {
+    alert("Record and transcribe your answer first.");
+    return;
+  }
+
+  task2LiveSocket.send(
+    JSON.stringify({
+      type: "candidate_text",
+      text,
+      prompt: speakingPrompts[2],
+      language: getRecognitionLanguage(),
+    })
+  );
+
+  speakingStatus[2].textContent = uiText("live_sent");
 }
 
 function getRecognitionLanguage() {
@@ -676,6 +816,9 @@ function bindButtons() {
       if (action === "task2-random") randomTask2Question();
       if (action === "task2-next") nextTask2Question();
       if (action === "task2-bank" && button.dataset.bank) selectTask2Bank(button.dataset.bank);
+      if (action === "task2-live-connect") connectTask2Live();
+      if (action === "task2-live-disconnect") disconnectTask2Live();
+      if (action === "task2-send-live") sendTask2TranscriptToLive();
       if (action === "task3-prev") previousTask3Question();
       if (action === "task3-random") randomTask3Question();
       if (action === "task3-next") nextTask3Question();
@@ -700,6 +843,10 @@ function init() {
   setTask2Question(0);
   setTask3Question(0);
   bindButtons();
+  if (task2LiveUrlInput) {
+    task2LiveUrlInput.value = localStorage.getItem("task2_live_ws_url") || "";
+  }
+  setTask2LiveStatusText("live_disconnected");
   document.addEventListener("tcf:langchange", () => {
     setTask2Question(task2QuestionIndex);
     setTask3Question(task3QuestionIndex);
@@ -709,6 +856,11 @@ function init() {
       const isHidden = block ? block.classList.contains("hidden") : true;
       button.textContent = isHidden ? uiText("reveal") : uiText("hide");
     });
+    if (!task2LiveSocket || task2LiveSocket.readyState !== WebSocket.OPEN) {
+      setTask2LiveStatusText("live_disconnected");
+    } else {
+      setTask2LiveStatusText("live_connected");
+    }
   });
 
   if (!SpeechRecognition && !window.MediaRecorder) {

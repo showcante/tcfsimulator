@@ -73,8 +73,26 @@
               <option value="server" selected data-i18n="opt_stt_server">Server STT (Google)</option>
               <option value="browser" data-i18n="opt_stt_browser">Browser STT (Web Speech)</option>
             </select>
+            <label for="task2-mode" data-i18n="label_task2_mode">Task 2 Engine</label>
+            <select id="task2-mode">
+              <option value="standard" selected data-i18n="opt_task2_standard">Standard (current flow)</option>
+              <option value="vertex" data-i18n="opt_task2_vertex">Advanced Vertex (WebSocket)</option>
+            </select>
+          </div>
+          <div class="controls">
+            <label for="task2-live-url" data-i18n="label_task2_ws_url">Task 2 Vertex WS URL</label>
+            <input
+              id="task2-live-url"
+              type="text"
+              placeholder="wss://your-cloud-run-url/ws/task2-live"
+              data-i18n-placeholder="task2_ws_url_placeholder"
+            />
+            <button type="button" data-action="task2-live-connect" data-i18n="btn_task2_connect">Connect Task 2 Live</button>
+            <button type="button" data-action="task2-live-disconnect" data-i18n="btn_task2_disconnect">Disconnect Task 2 Live</button>
+            <span class="status" id="task2-live-status" data-i18n="status_disconnected">Disconnected</span>
           </div>
           <p class="hint" data-i18n="speaking_hint_api">Use Gemini mode when running through local server with <code>GEMINI_API_KEY</code>.</p>
+          <p class="hint" data-i18n="speaking_hint_vertex">For Task 2 advanced mode, connect your Cloud Run WebSocket endpoint first.</p>
         </div>
 
         <div class="task" data-speaking-task="2">
@@ -106,6 +124,7 @@
             <button type="button" data-action="stop-rec" data-task="2" data-i18n="btn_stop_recording">Stop Recording</button>
             <button type="button" data-action="copy-speaking" data-task="2" data-i18n="btn_copy_transcript">Copy Transcript</button>
             <button type="button" data-action="copy-task2-eval" data-i18n="btn_copy_task2_eval">Copy Task 2 For Evaluation</button>
+            <button type="button" data-action="task2-send-live" data-i18n="btn_task2_send_live">Send Last Transcript To Examiner</button>
           </div>
           <audio id="prompt-audio-2" controls preload="none"></audio>
           <label for="transcript-speaking-2" data-i18n="label_transcript">Transcript</label>
