@@ -77,6 +77,12 @@ const keepListeningTask = {
   2: false,
   3: false,
 };
+const vertexLoopState = {
+  2: {
+    retriesWithoutSpeech: 0,
+    sawSpeechThisCycle: false,
+  },
+};
 
 const promptAudioUrls = {
   2: null,
@@ -543,6 +549,9 @@ function buildRecognizer(task) {
   recognizer.onstart = () => {
     activeRecognitionTask = task;
     clearTimeUp(task);
+    if (task === 2 && isTask2VertexMode()) {
+      vertexLoopState[2].sawSpeechThisCycle = false;
+    }
     speakingStatus[task].textContent = "Listening";
   };
 
@@ -563,6 +572,10 @@ function buildRecognizer(task) {
 
     if (gotAnyText) {
       noSpeechCount[task] = 0;
+      if (task === 2 && isTask2VertexMode()) {
+        vertexLoopState[2].sawSpeechThisCycle = true;
+        vertexLoopState[2].retriesWithoutSpeech = 0;
+      }
       speakingStatus[task].textContent = "Listening";
     }
 
@@ -585,11 +598,13 @@ function buildRecognizer(task) {
     }
 
     if (event.error === "audio-capture") {
+      if (task === 2 && isTask2VertexMode()) keepListeningTask[2] = false;
       speakingStatus[task].textContent = "Mic not detected";
       return;
     }
 
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      if (task === 2 && isTask2VertexMode()) keepListeningTask[2] = false;
       speakingStatus[task].textContent = "Mic permission blocked";
       return;
     }
@@ -618,6 +633,18 @@ function buildRecognizer(task) {
     }
 
     if (task === 2 && isTask2VertexMode() && keepListeningTask[2]) {
+      if (!vertexLoopState[2].sawSpeechThisCycle) {
+        vertexLoopState[2].retriesWithoutSpeech += 1;
+      } else {
+        vertexLoopState[2].retriesWithoutSpeech = 0;
+      }
+
+      if (vertexLoopState[2].retriesWithoutSpeech >= 4) {
+        keepListeningTask[2] = false;
+        speakingStatus[2].textContent = "Mic not capturing speech. Use Chrome and check mic permission.";
+        return;
+      }
+
       speakingStatus[2].textContent = "Listening (reconnecting...)";
       setTimeout(() => {
         if (!keepListeningTask[2]) return;
@@ -760,6 +787,10 @@ function stopServerTranscription(task, fromTimeout = false) {
 
 function startRecognition(task) {
   keepListeningTask[task] = true;
+  if (task === 2 && isTask2VertexMode()) {
+    vertexLoopState[2].retriesWithoutSpeech = 0;
+    vertexLoopState[2].sawSpeechThisCycle = false;
+  }
 
   if (task === 2 && isTask2VertexMode() && isServerSttSelected()) {
     sttProviderSelect.value = "browser";
@@ -800,6 +831,10 @@ function startRecognition(task) {
 
 function stopRecognition(task, fromTimeout = false) {
   keepListeningTask[task] = false;
+  if (task === 2) {
+    vertexLoopState[2].retriesWithoutSpeech = 0;
+    vertexLoopState[2].sawSpeechThisCycle = false;
+  }
 
   if (isServerSttSelected()) {
     stopServerTranscription(task, fromTimeout);
