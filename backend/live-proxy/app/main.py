@@ -186,6 +186,7 @@ async def task2_live(ws: WebSocket) -> None:
             print(f"INFO: vertex live connected model={MODEL} location={LOCATION}", flush=True)
             reader_task = asyncio.create_task(stream_vertex_to_browser(session, ws))
             audio_chunks_received = 0
+            input_mode = "audio"
             try:
                 while True:
                     payload = await ws.receive_text()
@@ -202,6 +203,9 @@ async def task2_live(ws: WebSocket) -> None:
 
                     if msg_type == "start_session":
                         prompt_context = (message.get("prompt") or "").strip()
+                        requested_mode = str(message.get("inputMode") or "audio").strip().lower()
+                        input_mode = "text" if requested_mode == "text" else "audio"
+                        print(f"INFO: start_session input_mode={input_mode}", flush=True)
                         seed = (
                             "Commence l'interaction maintenant. "
                             "Salue le candidat, donne un premier détail concret lié à la consigne, "
@@ -216,6 +220,8 @@ async def task2_live(ws: WebSocket) -> None:
                         continue
 
                     if msg_type == "audio_chunk":
+                        if input_mode == "text":
+                            continue
                         audio_b64 = (message.get("audioBase64") or "").strip()
                         if not audio_b64:
                             continue
@@ -232,6 +238,8 @@ async def task2_live(ws: WebSocket) -> None:
                         continue
 
                     if msg_type == "audio_stream_end":
+                        if input_mode == "text":
+                            continue
                         print(
                             f"INFO: audio_stream_end received (chunks={audio_chunks_received})",
                             flush=True,

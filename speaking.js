@@ -97,6 +97,7 @@ const task2NativeAudioState = {
   sentChunkCount: 0,
   lastVoiceAt: 0,
 };
+const TASK2_USE_TEXT_TURNS = true;
 let task2CaptionRecognizer = null;
 let task2CaptionActive = false;
 let task2CaptionRestartTimer = null;
@@ -656,6 +657,7 @@ function startTask2CaptionRecognition() {
         const tag = currentLang() === "fr" ? "Candidat" : "Candidate";
         const sentence = finalText.trim();
         transcriptFields[2].value = `${transcriptFields[2].value}\n[${tag}] ${sentence}`.trim() + "\n";
+        sendTask2LiveText(sentence);
       }
     };
 
@@ -741,19 +743,6 @@ function queueTask2ExaminerAudioChunk(audioBase64, mimeType) {
   if (!bytes.length) return;
   task2ExaminerAudioBuffer.chunks.push(bytes);
   if (mimeType) task2ExaminerAudioBuffer.mimeType = mimeType;
-
-  const queuedBytes = task2ExaminerAudioBuffer.chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  if (!task2ExaminerAudioBuffer.isPlaying && queuedBytes >= 48000) {
-    flushTask2ExaminerAudioBuffer();
-    return;
-  }
-
-  if (task2ExaminerAudioBuffer.flushTimer) {
-    clearTimeout(task2ExaminerAudioBuffer.flushTimer);
-  }
-  task2ExaminerAudioBuffer.flushTimer = setTimeout(() => {
-    flushTask2ExaminerAudioBuffer();
-  }, 180);
 
   if (task2ExaminerAudioBuffer.idleTimer) {
     clearTimeout(task2ExaminerAudioBuffer.idleTimer);
@@ -971,14 +960,16 @@ async function startTask2NativeAudioCapture() {
       if (rms > 0.015) {
         task2NativeAudioState.lastVoiceAt = Date.now();
       }
-      task2LiveSocket.send(
-        JSON.stringify({
-          type: "audio_chunk",
-          audioBase64: float32ToPcm16Base64(pcmInput),
-          mimeType: "audio/pcm;rate=16000",
-        })
-      );
-      task2NativeAudioState.sentChunkCount += 1;
+      if (!TASK2_USE_TEXT_TURNS) {
+        task2LiveSocket.send(
+          JSON.stringify({
+            type: "audio_chunk",
+            audioBase64: float32ToPcm16Base64(pcmInput),
+            mimeType: "audio/pcm;rate=16000",
+          })
+        );
+        task2NativeAudioState.sentChunkCount += 1;
+      }
     };
 
     source.connect(processor);
@@ -994,6 +985,7 @@ async function startTask2NativeAudioCapture() {
     clearTask2TurnSilenceTimer();
     task2NativeAudioState.turnSilenceTimer = setInterval(() => {
       if (!task2NativeAudioState.isActive) return;
+      if (TASK2_USE_TEXT_TURNS) return;
       if (task2NativeAudioState.waitingExaminer) return;
       const silenceMs = Date.now() - task2NativeAudioState.lastVoiceAt;
       if (silenceMs >= 1200) {
@@ -1026,7 +1018,9 @@ function stopTask2NativeAudioCapture(fromTimeout = false) {
   stopMicMeter(2);
 
   if (task2LiveSocket && task2LiveSocket.readyState === WebSocket.OPEN) {
-    task2LiveSocket.send(JSON.stringify({ type: "audio_stream_end" }));
+    if (!TASK2_USE_TEXT_TURNS) {
+      task2LiveSocket.send(JSON.stringify({ type: "audio_stream_end" }));
+    }
   }
 
   if (task2NativeAudioState.source) {
@@ -1627,6 +1621,7 @@ function startRecognition(task) {
           type: "start_session",
           prompt: speakingPrompts[2],
           language: getRecognitionLanguage(),
+          inputMode: TASK2_USE_TEXT_TURNS ? "text" : "audio",
         })
       );
       armTask2AwaitingResponseTimer();
