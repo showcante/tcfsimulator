@@ -132,6 +132,8 @@ async def stream_vertex_to_browser(session: Any, ws: WebSocket) -> None:
                     continue
                 data = getattr(inline_data, "data", None)
                 mime_type = getattr(inline_data, "mime_type", None) or "audio/pcm;rate=24000"
+                if mime_type == "audio/pcm":
+                    mime_type = "audio/pcm;rate=24000"
                 if not data:
                     continue
                 if isinstance(data, bytes):

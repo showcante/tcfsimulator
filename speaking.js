@@ -618,7 +618,7 @@ async function playTask2LiveModelAudio(audioBase64, mimeType = "audio/pcm;rate=2
       blob = new Blob([bytes], { type: "audio/wav" });
     } else {
       const match = String(mimeType || "").match(/rate=(\d+)/i);
-      const sampleRate = match ? Number(match[1]) || 16000 : 16000;
+      const sampleRate = match ? Number(match[1]) || 24000 : 24000;
       blob = pcm16ToWavBlob(bytes, sampleRate, 1);
     }
 
@@ -656,7 +656,6 @@ function startTask2CaptionRecognition() {
         const tag = currentLang() === "fr" ? "Candidat" : "Candidate";
         const sentence = finalText.trim();
         transcriptFields[2].value = `${transcriptFields[2].value}\n[${tag}] ${sentence}`.trim() + "\n";
-        sendTask2LiveText(sentence);
       }
     };
 
@@ -958,7 +957,6 @@ async function startTask2NativeAudioCapture() {
     processor.onaudioprocess = (event) => {
       if (!task2NativeAudioState.isActive) return;
       if (!task2LiveSocket || task2LiveSocket.readyState !== WebSocket.OPEN) return;
-      if (task2NativeAudioState.waitingExaminer) return;
       const input = event.inputBuffer.getChannelData(0);
       const pcmInput = downsampleFloat32(
         input,
