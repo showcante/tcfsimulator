@@ -107,6 +107,7 @@ const task2ExaminerAudioBuffer = {
   mimeType: "audio/pcm;rate=24000",
   flushTimer: null,
   isPlaying: false,
+  idleTimer: null,
 };
 const emptyServerSttChunks = {
   2: 0,
@@ -617,7 +618,7 @@ async function playTask2LiveModelAudio(audioBase64, mimeType = "audio/pcm;rate=2
       blob = new Blob([bytes], { type: "audio/wav" });
     } else {
       const match = String(mimeType || "").match(/rate=(\d+)/i);
-      const sampleRate = match ? Number(match[1]) || 24000 : 24000;
+      const sampleRate = match ? Number(match[1]) || 16000 : 16000;
       blob = pcm16ToWavBlob(bytes, sampleRate, 1);
     }
 
@@ -707,6 +708,10 @@ function resetTask2ExaminerAudioBuffer() {
     clearTimeout(task2ExaminerAudioBuffer.flushTimer);
     task2ExaminerAudioBuffer.flushTimer = null;
   }
+  if (task2ExaminerAudioBuffer.idleTimer) {
+    clearTimeout(task2ExaminerAudioBuffer.idleTimer);
+    task2ExaminerAudioBuffer.idleTimer = null;
+  }
 }
 
 async function flushTask2ExaminerAudioBuffer() {
@@ -750,6 +755,19 @@ function queueTask2ExaminerAudioChunk(audioBase64, mimeType) {
   task2ExaminerAudioBuffer.flushTimer = setTimeout(() => {
     flushTask2ExaminerAudioBuffer();
   }, 180);
+
+  if (task2ExaminerAudioBuffer.idleTimer) {
+    clearTimeout(task2ExaminerAudioBuffer.idleTimer);
+  }
+  task2ExaminerAudioBuffer.idleTimer = setTimeout(async () => {
+    await flushTask2ExaminerAudioBuffer();
+    task2NativeAudioState.waitingExaminer = false;
+    task2NativeAudioState.sentChunkCount = 0;
+    task2NativeAudioState.lastVoiceAt = Date.now();
+    if (keepListeningTask[2]) {
+      speakingStatus[2].textContent = "Listening (live audio)";
+    }
+  }, 900);
 }
 
 function clearTask2TurnSilenceTimer() {
