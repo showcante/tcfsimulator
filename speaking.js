@@ -97,7 +97,7 @@ const task2NativeAudioState = {
   sentChunkCount: 0,
   lastVoiceAt: 0,
 };
-const TASK2_USE_TEXT_TURNS = true;
+const TASK2_USE_TEXT_TURNS = false;
 let task2CaptionRecognizer = null;
 let task2CaptionActive = false;
 let task2CaptionRestartTimer = null;
@@ -657,7 +657,9 @@ function startTask2CaptionRecognition() {
         const tag = currentLang() === "fr" ? "Candidat" : "Candidate";
         const sentence = finalText.trim();
         transcriptFields[2].value = `${transcriptFields[2].value}\n[${tag}] ${sentence}`.trim() + "\n";
-        sendTask2LiveText(sentence);
+        if (TASK2_USE_TEXT_TURNS) {
+          sendTask2LiveText(sentence);
+        }
       }
     };
 
@@ -744,6 +746,13 @@ function queueTask2ExaminerAudioChunk(audioBase64, mimeType) {
   task2ExaminerAudioBuffer.chunks.push(bytes);
   if (mimeType) task2ExaminerAudioBuffer.mimeType = mimeType;
 
+  if (task2ExaminerAudioBuffer.flushTimer) {
+    clearTimeout(task2ExaminerAudioBuffer.flushTimer);
+  }
+  task2ExaminerAudioBuffer.flushTimer = setTimeout(() => {
+    flushTask2ExaminerAudioBuffer();
+  }, 140);
+
   if (task2ExaminerAudioBuffer.idleTimer) {
     clearTimeout(task2ExaminerAudioBuffer.idleTimer);
   }
@@ -755,7 +764,7 @@ function queueTask2ExaminerAudioChunk(audioBase64, mimeType) {
     if (keepListeningTask[2]) {
       speakingStatus[2].textContent = "Listening (live audio)";
     }
-  }, 900);
+  }, 450);
 }
 
 function clearTask2TurnSilenceTimer() {
@@ -933,7 +942,7 @@ async function startTask2NativeAudioCapture() {
 
     const context = new AudioCtx({ sampleRate: 16000 });
     const source = context.createMediaStreamSource(stream);
-    const processor = context.createScriptProcessor(1024, 1, 1);
+    const processor = context.createScriptProcessor(512, 1, 1);
     const muteGain = context.createGain();
     muteGain.gain.value = 0;
 
@@ -959,6 +968,13 @@ async function startTask2NativeAudioCapture() {
       const rms = Math.sqrt(sumSquares / Math.max(1, pcmInput.length));
       if (rms > 0.015) {
         task2NativeAudioState.lastVoiceAt = Date.now();
+        if (!task2ExaminerAudio.paused) {
+          task2ExaminerAudio.pause();
+          task2ExaminerAudio.currentTime = 0;
+          resetTask2ExaminerAudioBuffer();
+          task2NativeAudioState.waitingExaminer = false;
+          speakingStatus[2].textContent = "Listening (live audio)";
+        }
       }
       if (!TASK2_USE_TEXT_TURNS) {
         task2LiveSocket.send(
@@ -1629,6 +1645,7 @@ function startRecognition(task) {
     if (TASK2_USE_TEXT_TURNS) {
       sttProviderSelect.value = "server";
       startServerTranscription(2);
+      startTask2CaptionRecognition();
       return;
     }
     startTask2NativeAudioCapture().then(() => {
@@ -1687,6 +1704,7 @@ function stopRecognition(task, fromTimeout = false) {
       clearTask2SilenceTimer();
       clearTask2InterimTimer();
       task2InterimState.lastRawInterim = "";
+      stopTask2CaptionRecognition();
       stopServerTranscription(task, fromTimeout);
       return;
     }
