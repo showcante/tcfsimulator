@@ -92,6 +92,10 @@ const task2NativeAudioState = {
   muteGain: null,
   isActive: false,
   inputSampleRate: 16000,
+  turnSilenceTimer: null,
+  waitingExaminer: false,
+  sentChunkCount: 0,
+  lastVoiceAt: 0,
 };
 let task2CaptionRecognizer = null;
 let task2CaptionActive = false;
@@ -720,6 +724,11 @@ async function flushTask2ExaminerAudioBuffer() {
     resetTask2ExaminerAudioBuffer();
   } finally {
     task2ExaminerAudioBuffer.isPlaying = false;
+    if (task2ExaminerAudioBuffer.chunks.length) {
+      setTimeout(() => {
+        flushTask2ExaminerAudioBuffer();
+      }, 30);
+    }
   }
 }
 
@@ -729,12 +738,33 @@ function queueTask2ExaminerAudioChunk(audioBase64, mimeType) {
   task2ExaminerAudioBuffer.chunks.push(bytes);
   if (mimeType) task2ExaminerAudioBuffer.mimeType = mimeType;
 
+  const queuedBytes = task2ExaminerAudioBuffer.chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  if (!task2ExaminerAudioBuffer.isPlaying && queuedBytes >= 48000) {
+    flushTask2ExaminerAudioBuffer();
+    return;
+  }
+
   if (task2ExaminerAudioBuffer.flushTimer) {
     clearTimeout(task2ExaminerAudioBuffer.flushTimer);
   }
   task2ExaminerAudioBuffer.flushTimer = setTimeout(() => {
     flushTask2ExaminerAudioBuffer();
-  }, 500);
+  }, 180);
+}
+
+function clearTask2TurnSilenceTimer() {
+  if (task2NativeAudioState.turnSilenceTimer) {
+    clearInterval(task2NativeAudioState.turnSilenceTimer);
+    task2NativeAudioState.turnSilenceTimer = null;
+  }
+}
+
+function triggerTask2TurnEnd() {
+  if (!task2LiveSocket || task2LiveSocket.readyState !== WebSocket.OPEN) return;
+  if (task2NativeAudioState.waitingExaminer) return;
+  if (task2NativeAudioState.sentChunkCount < 3) return;
+  task2NativeAudioState.waitingExaminer = true;
+  task2LiveSocket.send(JSON.stringify({ type: "audio_stream_end" }));
 }
 
 function connectTask2Live() {
@@ -799,7 +829,13 @@ function connectTask2Live() {
     }
 
     if (data.type === "examiner_audio_end") {
+      task2NativeAudioState.waitingExaminer = false;
+      task2NativeAudioState.sentChunkCount = 0;
+      task2NativeAudioState.lastVoiceAt = Date.now();
       await flushTask2ExaminerAudioBuffer();
+      if (keepListeningTask[2]) {
+        speakingStatus[2].textContent = "Listening (live audio)";
+      }
       return;
     }
 
@@ -897,15 +933,28 @@ async function startTask2NativeAudioCapture() {
 
     task2NativeAudioState.inputSampleRate = context.sampleRate || 16000;
 
+    task2NativeAudioState.waitingExaminer = false;
+    task2NativeAudioState.sentChunkCount = 0;
+    task2NativeAudioState.lastVoiceAt = Date.now();
+
     processor.onaudioprocess = (event) => {
       if (!task2NativeAudioState.isActive) return;
       if (!task2LiveSocket || task2LiveSocket.readyState !== WebSocket.OPEN) return;
+      if (task2NativeAudioState.waitingExaminer) return;
       const input = event.inputBuffer.getChannelData(0);
       const pcmInput = downsampleFloat32(
         input,
         task2NativeAudioState.inputSampleRate || 16000,
         16000
       );
+      let sumSquares = 0;
+      for (let i = 0; i < pcmInput.length; i += 1) {
+        sumSquares += pcmInput[i] * pcmInput[i];
+      }
+      const rms = Math.sqrt(sumSquares / Math.max(1, pcmInput.length));
+      if (rms > 0.015) {
+        task2NativeAudioState.lastVoiceAt = Date.now();
+      }
       task2LiveSocket.send(
         JSON.stringify({
           type: "audio_chunk",
@@ -913,6 +962,7 @@ async function startTask2NativeAudioCapture() {
           mimeType: "audio/pcm;rate=16000",
         })
       );
+      task2NativeAudioState.sentChunkCount += 1;
     };
 
     source.connect(processor);
@@ -925,6 +975,15 @@ async function startTask2NativeAudioCapture() {
     task2NativeAudioState.processor = processor;
     task2NativeAudioState.muteGain = muteGain;
     task2NativeAudioState.isActive = true;
+    clearTask2TurnSilenceTimer();
+    task2NativeAudioState.turnSilenceTimer = setInterval(() => {
+      if (!task2NativeAudioState.isActive) return;
+      if (task2NativeAudioState.waitingExaminer) return;
+      const silenceMs = Date.now() - task2NativeAudioState.lastVoiceAt;
+      if (silenceMs >= 1200) {
+        triggerTask2TurnEnd();
+      }
+    }, 220);
 
     mediaStreams[2] = stream;
     startMicMeter(2, stream);
@@ -943,6 +1002,9 @@ function stopTask2NativeAudioCapture(fromTimeout = false) {
 
   task2NativeAudioState.isActive = false;
   task2NativeAudioState.inputSampleRate = 16000;
+  task2NativeAudioState.waitingExaminer = false;
+  task2NativeAudioState.sentChunkCount = 0;
+  clearTask2TurnSilenceTimer();
   clearRecordingTimeout(2);
   setRecordingIndicator(2, false);
   stopMicMeter(2);
