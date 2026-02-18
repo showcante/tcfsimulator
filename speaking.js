@@ -1445,7 +1445,7 @@ async function transcribeBlobWithServer(task, blob) {
     emptyServerSttChunks[task] = 0;
     transcriptFields[task].value = `${transcriptFields[task].value}${text} `.trim() + " ";
     if (task === 2 && isTask2VertexMode()) {
-      handleTask2LiveTranscriptChunk(text);
+      sendTask2LiveText(text);
       armTask2SilenceTimer();
     }
     if (timedOutTask[task]) {
@@ -1626,6 +1626,11 @@ function startRecognition(task) {
       );
       armTask2AwaitingResponseTimer();
     }
+    if (TASK2_USE_TEXT_TURNS) {
+      sttProviderSelect.value = "server";
+      startServerTranscription(2);
+      return;
+    }
     startTask2NativeAudioCapture().then(() => {
       if (task2NativeAudioState.isActive) {
         startTask2CaptionRecognition();
@@ -1675,6 +1680,16 @@ function startRecognition(task) {
 function stopRecognition(task, fromTimeout = false) {
   clearRecorderFlushTimer(task);
   if (task === 2 && isTask2VertexMode()) {
+    if (TASK2_USE_TEXT_TURNS) {
+      setRecordingIndicator(task, false);
+      stopMicMeter(task);
+      keepListeningTask[2] = false;
+      clearTask2SilenceTimer();
+      clearTask2InterimTimer();
+      task2InterimState.lastRawInterim = "";
+      stopServerTranscription(task, fromTimeout);
+      return;
+    }
     stopTask2CaptionRecognition();
     stopTask2NativeAudioCapture(fromTimeout);
     clearTask2InterimTimer();
