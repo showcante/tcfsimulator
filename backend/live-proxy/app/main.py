@@ -2,7 +2,7 @@ import json
 import os
 import base64
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from google import genai
@@ -44,26 +44,6 @@ def get_client() -> genai.Client:
             raise RuntimeError("Missing GOOGLE_CLOUD_PROJECT for Vertex client.")
         client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION)
     return client
-
-
-def parse_response_text(response: Any) -> str:
-    response_text = getattr(response, "text", None)
-    if response_text and response_text.strip():
-        return response_text.strip()
-
-    text_parts: List[str] = []
-    candidates = getattr(response, "candidates", []) or []
-    if not candidates:
-        return ""
-
-    content = getattr(candidates[0], "content", None)
-    parts = getattr(content, "parts", []) or []
-    for part in parts:
-        part_text = getattr(part, "text", None)
-        if part_text:
-            text_parts.append(part_text.strip())
-
-    return "\n".join([item for item in text_parts if item]).strip()
 
 
 def build_vertex_error_payload(err: Exception) -> Dict[str, Any]:
@@ -133,9 +113,6 @@ async def stream_vertex_to_browser(session: Any, ws: WebSocket) -> None:
                 tx_text = getattr(output_tx, "text", None) or ""
                 if tx_text.strip():
                     await ws.send_json({"type": "examiner_text", "text": tx_text.strip()})
-
-            if getattr(message, "text", None):
-                await ws.send_json({"type": "examiner_text", "text": message.text})
 
             server_content = getattr(message, "server_content", None)
             if not server_content:
