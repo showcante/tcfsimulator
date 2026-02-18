@@ -91,6 +91,7 @@ const task2NativeAudioState = {
   processor: null,
   muteGain: null,
   isActive: false,
+  inputSampleRate: 16000,
 };
 let task2CaptionRecognizer = null;
 let task2CaptionActive = false;
@@ -229,6 +230,37 @@ function float32ToPcm16Base64(input) {
   let binary = "";
   for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
   return btoa(binary);
+}
+
+function downsampleFloat32(input, inputRate, outputRate = 16000) {
+  if (!input || !input.length) return new Float32Array(0);
+  if (!inputRate || inputRate <= 0 || inputRate === outputRate) {
+    return input;
+  }
+  if (outputRate > inputRate) {
+    return input;
+  }
+
+  const ratio = inputRate / outputRate;
+  const newLength = Math.max(1, Math.round(input.length / ratio));
+  const result = new Float32Array(newLength);
+  let offsetResult = 0;
+  let offsetBuffer = 0;
+
+  while (offsetResult < result.length) {
+    const nextOffsetBuffer = Math.min(input.length, Math.round((offsetResult + 1) * ratio));
+    let accum = 0;
+    let count = 0;
+    for (let i = offsetBuffer; i < nextOffsetBuffer; i += 1) {
+      accum += input[i];
+      count += 1;
+    }
+    result[offsetResult] = count > 0 ? accum / count : 0;
+    offsetResult += 1;
+    offsetBuffer = nextOffsetBuffer;
+  }
+
+  return result;
 }
 
 function concatUint8(chunks) {
@@ -863,14 +895,21 @@ async function startTask2NativeAudioCapture() {
     const muteGain = context.createGain();
     muteGain.gain.value = 0;
 
+    task2NativeAudioState.inputSampleRate = context.sampleRate || 16000;
+
     processor.onaudioprocess = (event) => {
       if (!task2NativeAudioState.isActive) return;
       if (!task2LiveSocket || task2LiveSocket.readyState !== WebSocket.OPEN) return;
       const input = event.inputBuffer.getChannelData(0);
+      const pcmInput = downsampleFloat32(
+        input,
+        task2NativeAudioState.inputSampleRate || 16000,
+        16000
+      );
       task2LiveSocket.send(
         JSON.stringify({
           type: "audio_chunk",
-          audioBase64: float32ToPcm16Base64(input),
+          audioBase64: float32ToPcm16Base64(pcmInput),
           mimeType: "audio/pcm;rate=16000",
         })
       );
@@ -903,6 +942,7 @@ function stopTask2NativeAudioCapture(fromTimeout = false) {
   if (!task2NativeAudioState.isActive && !task2NativeAudioState.stream) return;
 
   task2NativeAudioState.isActive = false;
+  task2NativeAudioState.inputSampleRate = 16000;
   clearRecordingTimeout(2);
   setRecordingIndicator(2, false);
   stopMicMeter(2);

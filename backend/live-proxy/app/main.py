@@ -100,18 +100,21 @@ async def health() -> Dict[str, Any]:
 
 
 async def stream_vertex_to_browser(session: Any, ws: WebSocket) -> None:
+    print("INFO: vertex stream reader started", flush=True)
     async for message in session.receive():
         try:
             input_tx = getattr(message, "input_transcription", None)
             if input_tx:
                 tx_text = getattr(input_tx, "text", None) or ""
                 if tx_text.strip():
+                    print(f"INFO: vertex input_transcription: {tx_text[:160]}", flush=True)
                     await ws.send_json({"type": "candidate_text_live", "text": tx_text.strip()})
 
             output_tx = getattr(message, "output_transcription", None)
             if output_tx:
                 tx_text = getattr(output_tx, "text", None) or ""
                 if tx_text.strip():
+                    print(f"INFO: vertex output_transcription: {tx_text[:160]}", flush=True)
                     await ws.send_json({"type": "examiner_text", "text": tx_text.strip()})
 
             server_content = getattr(message, "server_content", None)
@@ -135,6 +138,7 @@ async def stream_vertex_to_browser(session: Any, ws: WebSocket) -> None:
                     audio_b64 = base64.b64encode(data).decode("utf-8")
                 else:
                     audio_b64 = str(data)
+                print(f"INFO: vertex audio part mime={mime_type} size={len(audio_b64)}", flush=True)
                 await ws.send_json(
                     {
                         "type": "examiner_audio",
@@ -144,8 +148,10 @@ async def stream_vertex_to_browser(session: Any, ws: WebSocket) -> None:
                 )
 
             if getattr(server_content, "turn_complete", False):
+                print("INFO: vertex turn_complete", flush=True)
                 await ws.send_json({"type": "examiner_audio_end"})
-        except Exception:
+        except Exception as stream_err:
+            print(f"WARN: stream loop error: {stream_err}", flush=True)
             continue
 
 
@@ -175,7 +181,9 @@ async def task2_live(ws: WebSocket) -> None:
 
     try:
         async with get_client().aio.live.connect(model=MODEL, config=live_cfg) as session:
+            print(f"INFO: vertex live connected model={MODEL} location={LOCATION}", flush=True)
             reader_task = asyncio.create_task(stream_vertex_to_browser(session, ws))
+            audio_chunks_received = 0
             try:
                 while True:
                     payload = await ws.receive_text()
@@ -198,6 +206,7 @@ async def task2_live(ws: WebSocket) -> None:
                             "puis pose une question courte pour faire parler le candidat:\n"
                             f"{prompt_context or '(aucune consigne)'}"
                         )
+                        print("INFO: start_session received", flush=True)
                         await session.send_client_content(
                             turns=[types.Content(role="user", parts=[types.Part(text=seed)])],
                             turn_complete=True,
@@ -209,12 +218,22 @@ async def task2_live(ws: WebSocket) -> None:
                         if not audio_b64:
                             continue
                         audio_bytes = base64.b64decode(audio_b64)
+                        audio_chunks_received += 1
+                        if audio_chunks_received % 25 == 0:
+                            print(
+                                f"INFO: received audio_chunk count={audio_chunks_received} bytes={len(audio_bytes)}",
+                                flush=True,
+                            )
                         await session.send_realtime_input(
                             audio=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000")
                         )
                         continue
 
                     if msg_type == "audio_stream_end":
+                        print(
+                            f"INFO: audio_stream_end received (chunks={audio_chunks_received})",
+                            flush=True,
+                        )
                         await session.send_realtime_input(audio_stream_end=True)
                         continue
 
@@ -223,6 +242,7 @@ async def task2_live(ws: WebSocket) -> None:
                         candidate_text = (message.get("text") or "").strip()
                         if not candidate_text:
                             continue
+                        print(f"INFO: candidate_text received: {candidate_text[:160]}", flush=True)
                         await session.send_client_content(
                             turns=[types.Content(role="user", parts=[types.Part(text=candidate_text)])],
                             turn_complete=True,
