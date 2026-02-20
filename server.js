@@ -138,7 +138,7 @@ async function handleGeminiTts(req, res) {
     try {
       const parsed = JSON.parse(body || "{}");
       const text = (parsed.text || "").trim();
-      const voiceName = (parsed.voiceName || "Kore").trim();
+      const requestedVoice = (parsed.voiceName || "Kore").trim();
 
       if (!text) {
         sendJson(res, 400, { error: "Missing text for TTS." });
@@ -146,46 +146,53 @@ async function handleGeminiTts(req, res) {
       }
 
       const modelsToTry = [GEMINI_MODEL, "gemini-2.5-flash-preview-tts"];
+      const voicesToTry = [requestedVoice, "Aoede", "Kore"].filter(
+        (voice, index, arr) => voice && arr.indexOf(voice) === index
+      );
       let geminiResponse = null;
       let lastErrorText = "";
 
       for (const modelName of modelsToTry) {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
-        const requestPayload = {
-          contents: [
-            {
-              parts: [
-                {
-                  text: `Lis ce texte exactement, sans ajouter de mots.\nTexte:\n${text}`,
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            responseModalities: ["AUDIO"],
-            temperature: 0,
-            speechConfig: {
-              languageCode: "fr-CA",
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName,
+        for (const voiceName of voicesToTry) {
+          const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
+          const requestPayload = {
+            contents: [
+              {
+                parts: [
+                  {
+                    text: `Lis ce texte exactement, sans ajouter de mots.\nTexte:\n${text}`,
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+              temperature: 0,
+              speechConfig: {
+                languageCode: "fr-CA",
+                voiceConfig: {
+                  prebuiltVoiceConfig: {
+                    voiceName,
+                  },
                 },
               },
             },
-          },
-        };
+          };
 
-        geminiResponse = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": GEMINI_API_KEY,
-          },
-          body: JSON.stringify(requestPayload),
-        });
+          geminiResponse = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": GEMINI_API_KEY,
+            },
+            body: JSON.stringify(requestPayload),
+          });
 
-        if (geminiResponse.ok) break;
-        lastErrorText = await geminiResponse.text();
+          if (geminiResponse.ok) break;
+          const errText = await geminiResponse.text();
+          lastErrorText = `[model=${modelName} voice=${voiceName}] ${errText}`;
+        }
+        if (geminiResponse?.ok) break;
       }
 
       if (!geminiResponse.ok) {

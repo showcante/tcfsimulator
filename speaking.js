@@ -593,6 +593,9 @@ async function playTextWithGemini(task, text) {
   const cleanText = (text || "").trim();
   if (!cleanText) return;
   try {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
     speakingStatus[task].textContent = "Examiner speaking...";
     const response = await fetch("/api/gemini-tts", {
       method: "POST",
@@ -609,33 +612,31 @@ async function playTextWithGemini(task, text) {
     }
 
     const audioBlob = await response.blob();
-    if (task2ExaminerAudioUrl) {
-      URL.revokeObjectURL(task2ExaminerAudioUrl);
-    }
-
+    if (task2ExaminerAudioUrl) URL.revokeObjectURL(task2ExaminerAudioUrl);
     task2ExaminerAudioUrl = URL.createObjectURL(audioBlob);
-    task2ExaminerAudio.pause();
-    task2ExaminerAudio.currentTime = 0;
-    task2ExaminerAudio.src = task2ExaminerAudioUrl;
-    await task2ExaminerAudio.play();
 
-    speakingStatus[task].textContent = "Idle";
-  } catch (error) {
-    // Fallback to browser TTS so examiner is still heard when server TTS playback fails.
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.lang = getRecognitionLanguage() || "fr-FR";
-      utterance.rate = 0.95;
-      utterance.pitch = 1.0;
-      utterance.onend = () => {
-        speakingStatus[task].textContent = "Idle";
-      };
-      speakingStatus[task].textContent = "Examiner speaking...";
-      window.speechSynthesis.speak(utterance);
-    } catch (_fallbackError) {
-      speakingStatus[task].textContent = "Examiner voice unavailable (text only)";
+    const player = promptAudioPlayers[task] || task2ExaminerAudio;
+    player.pause();
+    player.currentTime = 0;
+    player.muted = false;
+    player.volume = 1;
+    player.src = task2ExaminerAudioUrl;
+
+    const playPromise = player.play();
+    if (playPromise && typeof playPromise.then === "function") {
+      await Promise.race([
+        playPromise,
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("Examiner audio playback timeout")), 3500);
+        }),
+      ]);
     }
+
+    player.onended = () => {
+      speakingStatus[task].textContent = "Idle";
+    };
+  } catch (error) {
+    speakingStatus[task].textContent = "Examiner voice unavailable (text only)";
   }
 }
 
