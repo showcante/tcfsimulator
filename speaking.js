@@ -669,7 +669,7 @@ async function playTextWithGemini(task, text) {
     const finish = () => {
       speakingStatus[task].textContent = "Idle";
     };
-    const watchdog = setTimeout(finish, 15000);
+    const watchdog = setTimeout(finish, 45000);
     player.onended = () => {
       clearTimeout(watchdog);
       finish();
@@ -1403,7 +1403,7 @@ async function playPromptWithGemini(task) {
     const finish = () => {
       speakingStatus[task].textContent = "Idle";
     };
-    const watchdog = setTimeout(finish, 15000);
+    const watchdog = setTimeout(finish, 45000);
     player.onended = () => {
       clearTimeout(watchdog);
       finish();
