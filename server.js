@@ -155,6 +155,11 @@ function isAbortMessage(message) {
   return /aborted|AbortError|operation was aborted/i.test(String(message || ""));
 }
 
+function isLikelyTtsModelName(name) {
+  const n = String(name || "").toLowerCase();
+  return n.includes("tts") || n.includes("native-audio");
+}
+
 async function handleGeminiTts(req, res) {
   if (!GEMINI_API_KEY) {
     sendJson(res, 500, { error: "Missing GEMINI_API_KEY in server environment." });
@@ -177,8 +182,10 @@ async function handleGeminiTts(req, res) {
         return;
       }
 
-      const modelsToTry = [...new Set([GEMINI_MODEL, "gemini-2.5-flash-preview-tts", "gemini-2.5-flash", "gemini-2.0-flash"])];
-      const voicesToTry = [requestedVoice, "Aoede", "Kore"].filter(
+      const modelsToTry = [...new Set([GEMINI_MODEL, "gemini-2.5-flash-preview-tts"])].filter(
+        isLikelyTtsModelName
+      );
+      const voicesToTry = ["Aoede", requestedVoice].filter(
         (voice, index, arr) => voice && arr.indexOf(voice) === index
       );
       const textChunks = chunkTextForTTS(text);
