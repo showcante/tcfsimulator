@@ -50,7 +50,7 @@ function chunkTextForTTS(text) {
   for (let sentence of sentences) {
     sentence = sentence.trim();
     if (!sentence) continue;
-    if (current.length + sentence.length < 120) {
+    if (current.length + sentence.length < 90) {
       current += (current ? " " : "") + sentence;
     } else {
       if (current) chunks.push(current);
@@ -69,6 +69,10 @@ async function fetchWithTimeout(url, options, timeoutMs = 120000) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function isAbortMessage(message) {
+  return /aborted|AbortError|operation was aborted/i.test(String(message || ""));
 }
 
 module.exports = async function handler(req, res) {
@@ -134,18 +138,28 @@ module.exports = async function handler(req, res) {
             },
           };
 
-          geminiResponse = await fetchWithTimeout(
-            endpoint,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-goog-api-key": GEMINI_API_KEY,
-              },
-              body: JSON.stringify(requestPayload),
-            },
-            120000
-          );
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            try {
+              geminiResponse = await fetchWithTimeout(
+                endpoint,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": GEMINI_API_KEY,
+                  },
+                  body: JSON.stringify(requestPayload),
+                },
+                45000
+              );
+              break;
+            } catch (error) {
+              if (attempt === 0 && isAbortMessage(error?.message)) {
+                continue;
+              }
+              throw error;
+            }
+          }
 
           if (geminiResponse.ok) break;
           const errText = await geminiResponse.text();

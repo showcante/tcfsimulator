@@ -1422,12 +1422,8 @@ async function playPromptWithGemini(task) {
 }
 
 function playPrompt(task) {
-  const provider = ttsProviderSelect.value;
-  if (provider === "gemini") {
-    playPromptWithGemini(task);
-    return;
-  }
-  playPromptWithBrowserVoice(task);
+  ttsProviderSelect.value = "gemini";
+  playPromptWithGemini(task);
 }
 
 function buildRecognizer(task) {
