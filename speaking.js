@@ -367,6 +367,8 @@ task2QuestionBanks.all = [...task2QuestionBanks.february, ...task2QuestionBanks.
 
 let task2ActiveBank = "february";
 let task2QuestionIndex = 0;
+let task2ConversationHistory = [];
+let task2ExaminerBusy = false;
 const task3QuestionBank = [
   "Que pensez-vous des habitudes de consommation dans les pays riches ?",
   "Tout le monde peut agir pour produire moins de dechets. Qu'en pensez-vous ?",
@@ -487,6 +489,10 @@ function uiText(key) {
 
 function isTask2VertexMode() {
   return task2ModeSelect?.value === "vertex";
+}
+
+function isTask2ReliableMode() {
+  return !isTask2VertexMode();
 }
 
 function setTask2LiveStatusText(key) {
@@ -1192,14 +1198,14 @@ function clearRecordingTimeout(task) {
   }
 }
 
-function armRecordingTimeout(task) {
+function armRecordingTimeout(task, customMs = null) {
   clearRecordingTimeout(task);
   timedOutTask[task] = false;
   recordingTimeouts[task] = setTimeout(() => {
     timedOutTask[task] = true;
     stopRecognition(task, true);
     showTimeUp(task);
-  }, taskMaxDurationMs[task]);
+  }, customMs || taskMaxDurationMs[task]);
 }
 
 function setTask2Question(index) {
@@ -1211,6 +1217,7 @@ function setTask2Question(index) {
   promptElements[2].textContent = prompt;
   task2QuestionMeta.textContent = `${uiText("question")} ${task2QuestionIndex + 1}/${total}`;
   task2BankMeta.textContent = `${uiText("bank")}: ${uiText(task2ActiveBank)}`;
+  task2ConversationHistory = [];
 }
 
 function nextTask2Question() {
@@ -1497,7 +1504,12 @@ async function transcribeBlobWithServer(task, blob) {
   const text = (data.text || "").trim();
   if (text) {
     emptyServerSttChunks[task] = 0;
-    transcriptFields[task].value = `${transcriptFields[task].value}${text} `.trim() + " ";
+    if (task === 2 && isTask2ReliableMode()) {
+      const candidateTag = currentLang() === "fr" ? "Candidat" : "Candidate";
+      transcriptFields[task].value = `${transcriptFields[task].value}\n[${candidateTag}] ${text}`.trim() + "\n";
+    } else {
+      transcriptFields[task].value = `${transcriptFields[task].value}${text} `.trim() + " ";
+    }
     if (task === 2 && isTask2VertexMode()) {
       sendTask2LiveText(text);
       armTask2SilenceTimer();
@@ -1507,6 +1519,7 @@ async function transcribeBlobWithServer(task, blob) {
     } else {
       speakingStatus[task].textContent = "Idle";
     }
+    return text;
   } else {
     emptyServerSttChunks[task] += 1;
     if (timedOutTask[task]) {
@@ -1521,6 +1534,57 @@ async function transcribeBlobWithServer(task, blob) {
         speakingStatus[task].textContent = "Listening";
       }
     }
+    return "";
+  }
+}
+
+async function sendTask2ReliableExaminerTurn(userText) {
+  const cleanUserText = (userText || "").trim();
+  if (!cleanUserText) return;
+  if (task2ExaminerBusy) {
+    speakingStatus[2].textContent = "Examiner is replying...";
+    return;
+  }
+
+  task2ExaminerBusy = true;
+  speakingStatus[2].textContent = "Examiner thinking...";
+
+  try {
+    const response = await fetch("/api/task2-examiner", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        taskPrompt: speakingPrompts[2],
+        userText: cleanUserText,
+        history: task2ConversationHistory,
+      }),
+    });
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || `Examiner request failed (${response.status})`);
+    }
+
+    const reply = String(body.reply || "").trim();
+    if (!reply) {
+      throw new Error("Examiner returned empty text.");
+    }
+
+    task2ConversationHistory.push({ role: "candidate", text: cleanUserText });
+    task2ConversationHistory.push({ role: "examiner", text: reply });
+    if (task2ConversationHistory.length > 24) {
+      task2ConversationHistory = task2ConversationHistory.slice(-24);
+    }
+
+    const examinerTag = currentLang() === "fr" ? "Examinateur" : "Examiner";
+    transcriptFields[2].value = `${transcriptFields[2].value}\n[${examinerTag}] ${reply}`.trim() + "\n";
+    await playTextWithGemini(2, reply);
+    speakingStatus[2].textContent = "Idle";
+  } catch (error) {
+    speakingStatus[2].textContent = "Examiner error";
+    alert(`Task 2 examiner failed: ${error.message}`);
+  } finally {
+    task2ExaminerBusy = false;
   }
 }
 
@@ -1616,7 +1680,10 @@ async function startServerTranscription(task) {
       const blob = new Blob(chunkList, { type: recorder.mimeType || "audio/webm" });
 
       try {
-        await transcribeBlobWithServer(task, blob);
+        const text = await transcribeBlobWithServer(task, blob);
+        if (task === 2 && isTask2ReliableMode()) {
+          await sendTask2ReliableExaminerTurn(text);
+        }
       } catch (error) {
         speakingStatus[task].textContent = "STT error";
         alert(`Transcription failed: ${error.message}`);
@@ -1637,7 +1704,8 @@ async function startServerTranscription(task) {
       }, 2200);
     }
     setRecordingIndicator(task, true);
-    armRecordingTimeout(task);
+    const turnLimitMs = task === 2 && isTask2ReliableMode() ? 55 * 1000 : null;
+    armRecordingTimeout(task, turnLimitMs);
   } catch (_error) {
     setRecordingIndicator(task, false);
     stopMicMeter(task);
@@ -1691,6 +1759,12 @@ function startRecognition(task) {
         startTask2CaptionRecognition();
       }
     });
+    return;
+  }
+
+  if (task === 2 && isTask2ReliableMode()) {
+    sttProviderSelect.value = "server";
+    startServerTranscription(task);
     return;
   }
 
