@@ -1551,7 +1551,8 @@ function buildRecognizer(task) {
   return recognizer;
 }
 
-async function transcribeBlobWithServer(task, blob) {
+async function transcribeBlobWithServer(task, blob, options = {}) {
+  const finalChunk = Boolean(options.finalChunk);
   speakingStatus[task].textContent = "Transcribing...";
   const arrayBuffer = await blob.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
@@ -1605,7 +1606,7 @@ async function transcribeBlobWithServer(task, blob) {
       showTimeUp(task);
     } else {
       const audioLooksPresent = (blob?.size || 0) > 5000;
-      if (emptyServerSttChunks[task] >= 6) {
+      if (finalChunk || emptyServerSttChunks[task] >= 6) {
         speakingStatus[task].textContent = audioLooksPresent
           ? "Audio captured, but words were not recognized. Try slower speech and set language to French (Canada)."
           : "No speech recognized (check mic input device and speak closer)";
@@ -1651,8 +1652,8 @@ async function sendTask2ReliableExaminerTurn(userText) {
 
     task2ConversationHistory.push({ role: "candidate", text: cleanUserText });
     task2ConversationHistory.push({ role: "examiner", text: reply });
-    if (task2ConversationHistory.length > 24) {
-      task2ConversationHistory = task2ConversationHistory.slice(-24);
+    if (task2ConversationHistory.length > 60) {
+      task2ConversationHistory = task2ConversationHistory.slice(-60);
     }
 
     const examinerTag = currentLang() === "fr" ? "Examinateur" : "Examiner";
@@ -1714,7 +1715,7 @@ async function startServerTranscription(task) {
 
       if (isTask2VertexLiveMode) {
         try {
-          await transcribeBlobWithServer(task, event.data);
+          await transcribeBlobWithServer(task, event.data, { finalChunk: false });
         } catch (error) {
           speakingStatus[task].textContent = "STT error";
           alert(`Transcription failed: ${error.message}`);
@@ -1759,7 +1760,7 @@ async function startServerTranscription(task) {
       const blob = new Blob(chunkList, { type: recorder.mimeType || "audio/webm" });
 
       try {
-        const text = await transcribeBlobWithServer(task, blob);
+        const text = await transcribeBlobWithServer(task, blob, { finalChunk: true });
         if (task === 2 && isTask2ReliableMode()) {
           await sendTask2ReliableExaminerTurn(text);
         }

@@ -420,7 +420,7 @@ async function handleTask2Examiner(req, res) {
 
     const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-2.5-flash";
     const compactHistory = history
-      .slice(-10)
+      .slice(-20)
       .map((item) => {
         const role = item?.role === "examiner" ? "Examinateur" : "Candidat";
         const text = String(item?.text || "").trim();
