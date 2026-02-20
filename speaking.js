@@ -96,6 +96,7 @@ const task2NativeAudioState = {
   waitingExaminer: false,
   sentChunkCount: 0,
   lastVoiceAt: 0,
+  heardSpeechSinceTurnStart: false,
 };
 const TASK2_USE_TEXT_TURNS = false;
 const TASK2_SILENCE_RMS_THRESHOLD = 0.06;
@@ -745,6 +746,7 @@ async function flushTask2ExaminerAudioBuffer() {
 function queueTask2ExaminerAudioChunk(audioBase64, mimeType) {
   const bytes = b64ToBytes(audioBase64);
   if (!bytes.length) return;
+  task2NativeAudioState.waitingExaminer = true;
   task2ExaminerAudioBuffer.chunks.push(bytes);
   if (mimeType) task2ExaminerAudioBuffer.mimeType = mimeType;
 
@@ -762,6 +764,7 @@ function queueTask2ExaminerAudioChunk(audioBase64, mimeType) {
     await flushTask2ExaminerAudioBuffer();
     task2NativeAudioState.waitingExaminer = false;
     task2NativeAudioState.sentChunkCount = 0;
+    task2NativeAudioState.heardSpeechSinceTurnStart = false;
     task2NativeAudioState.lastVoiceAt = Date.now();
     if (keepListeningTask[2]) {
       speakingStatus[2].textContent = "Listening (live audio)";
@@ -779,8 +782,10 @@ function clearTask2TurnSilenceTimer() {
 function triggerTask2TurnEnd() {
   if (!task2LiveSocket || task2LiveSocket.readyState !== WebSocket.OPEN) return;
   if (task2NativeAudioState.waitingExaminer) return;
+  if (!task2NativeAudioState.heardSpeechSinceTurnStart) return;
   if (task2NativeAudioState.sentChunkCount < 3) return;
   task2NativeAudioState.waitingExaminer = true;
+  task2NativeAudioState.heardSpeechSinceTurnStart = false;
   task2LiveSocket.send(JSON.stringify({ type: "audio_stream_end" }));
 }
 
@@ -952,6 +957,7 @@ async function startTask2NativeAudioCapture() {
 
     task2NativeAudioState.waitingExaminer = false;
     task2NativeAudioState.sentChunkCount = 0;
+    task2NativeAudioState.heardSpeechSinceTurnStart = false;
     task2NativeAudioState.lastVoiceAt = Date.now();
 
     processor.onaudioprocess = (event) => {
@@ -969,6 +975,7 @@ async function startTask2NativeAudioCapture() {
       }
       const rms = Math.sqrt(sumSquares / Math.max(1, pcmInput.length));
       if (rms > TASK2_SILENCE_RMS_THRESHOLD) {
+        task2NativeAudioState.heardSpeechSinceTurnStart = true;
         task2NativeAudioState.lastVoiceAt = Date.now();
       }
       if (!TASK2_USE_TEXT_TURNS) {
@@ -1023,6 +1030,7 @@ function stopTask2NativeAudioCapture(fromTimeout = false) {
   task2NativeAudioState.inputSampleRate = 16000;
   task2NativeAudioState.waitingExaminer = false;
   task2NativeAudioState.sentChunkCount = 0;
+  task2NativeAudioState.heardSpeechSinceTurnStart = false;
   clearTask2TurnSilenceTimer();
   clearRecordingTimeout(2);
   setRecordingIndicator(2, false);
