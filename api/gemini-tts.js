@@ -79,9 +79,9 @@ function isAbortMessage(message) {
   return /aborted|AbortError|operation was aborted/i.test(String(message || ""));
 }
 
-function isLikelyTtsModelName(name) {
-  const n = String(name || "").toLowerCase();
-  return n.includes("tts") || n.includes("native-audio");
+function shouldSkipModelForAudio(errorText) {
+  const text = String(errorText || "").toLowerCase();
+  return text.includes("does not support the requested response modalities") && text.includes("audio");
 }
 
 module.exports = async function handler(req, res) {
@@ -91,7 +91,7 @@ module.exports = async function handler(req, res) {
   }
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  const GEMINI_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
+  const GEMINI_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash";
 
   if (!GEMINI_API_KEY) {
     sendJson(res, 500, { error: "Missing GEMINI_API_KEY in server environment." });
@@ -108,9 +108,7 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    const modelsToTry = [...new Set([GEMINI_MODEL, "gemini-2.5-flash-preview-tts"])].filter(
-      isLikelyTtsModelName
-    );
+    const modelsToTry = [...new Set([GEMINI_MODEL, "gemini-2.5-flash", "gemini-2.5-flash-preview-tts"])].filter(Boolean);
     const voicesToTry = ["Aoede", requestedVoice].filter(
       (voice, index, arr) => voice && arr.indexOf(voice) === index
     );
@@ -148,7 +146,7 @@ module.exports = async function handler(req, res) {
             },
           };
 
-          for (let attempt = 0; attempt < 3; attempt += 1) {
+          for (let attempt = 0; attempt < 2; attempt += 1) {
             try {
               geminiResponse = await fetchWithTimeout(
                 endpoint,
@@ -160,12 +158,12 @@ module.exports = async function handler(req, res) {
                   },
                   body: JSON.stringify(requestPayload),
                   },
-                  30000
+                  12000
                 );
               break;
             } catch (error) {
               lastErrorText = `[model=${modelName} voice=${voiceName}] ${error?.message || "unknown fetch error"}`;
-              if (attempt < 2 && isAbortMessage(error?.message)) {
+              if (attempt < 1 && isAbortMessage(error?.message)) {
                 await sleep(300 * (attempt + 1));
                 continue;
               }
@@ -177,6 +175,9 @@ module.exports = async function handler(req, res) {
           if (geminiResponse && !geminiResponse.ok) {
             const errText = await geminiResponse.text().catch(() => "");
             lastErrorText = `[model=${modelName} voice=${voiceName}] HTTP ${geminiResponse.status} ${errText}`;
+            if (shouldSkipModelForAudio(errText)) {
+              continue;
+            }
           }
         }
         if (geminiResponse?.ok) break;
