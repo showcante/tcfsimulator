@@ -968,13 +968,6 @@ async function startTask2NativeAudioCapture() {
       const rms = Math.sqrt(sumSquares / Math.max(1, pcmInput.length));
       if (rms > 0.015) {
         task2NativeAudioState.lastVoiceAt = Date.now();
-        if (!task2ExaminerAudio.paused) {
-          task2ExaminerAudio.pause();
-          task2ExaminerAudio.currentTime = 0;
-          resetTask2ExaminerAudioBuffer();
-          task2NativeAudioState.waitingExaminer = false;
-          speakingStatus[2].textContent = "Listening (live audio)";
-        }
       }
       if (!TASK2_USE_TEXT_TURNS) {
         task2LiveSocket.send(
