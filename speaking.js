@@ -118,6 +118,7 @@ const task2ExaminerAudioBuffer = {
   isPlaying: false,
   idleTimer: null,
 };
+let warnedKoreFallback = false;
 const emptyServerSttChunks = {
   2: 0,
   3: 0,
@@ -597,12 +598,18 @@ async function playTextWithGemini(task, text) {
       window.speechSynthesis.cancel();
     }
     speakingStatus[task].textContent = "Examiner speaking...";
+    const requestedVoice = (geminiVoiceSelect.value || "Aoede").trim();
+    const effectiveVoice = requestedVoice.toLowerCase() === "kore" ? "Aoede" : requestedVoice;
+    if (requestedVoice.toLowerCase() === "kore" && !warnedKoreFallback) {
+      warnedKoreFallback = true;
+      speakingStatus[task].textContent = "Kore unavailable, using Aoede";
+    }
     const response = await fetch("/api/gemini-tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text: cleanText,
-        voiceName: geminiVoiceSelect.value,
+        voiceName: effectiveVoice,
       }),
     });
 
@@ -636,6 +643,11 @@ async function playTextWithGemini(task, text) {
       speakingStatus[task].textContent = "Idle";
     };
   } catch (error) {
+    const message = String(error?.message || "");
+    if (/NotAllowedError|playback timeout/i.test(message)) {
+      speakingStatus[task].textContent = "Examiner audio ready - click play on the player";
+      return;
+    }
     speakingStatus[task].textContent = "Examiner voice unavailable (text only)";
   }
 }
@@ -1305,6 +1317,11 @@ function playPromptWithBrowserVoice(task) {
 
 async function playPromptWithGemini(task) {
   speakingStatus[task].textContent = "Generating audio...";
+  const requestedVoice = (geminiVoiceSelect.value || "Aoede").trim();
+  const effectiveVoice = requestedVoice.toLowerCase() === "kore" ? "Aoede" : requestedVoice;
+  if (requestedVoice.toLowerCase() === "kore") {
+    speakingStatus[task].textContent = "Kore unavailable, using Aoede";
+  }
 
   try {
     const response = await fetch("/api/gemini-tts", {
@@ -1312,7 +1329,7 @@ async function playPromptWithGemini(task) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text: speakingPrompts[task],
-        voiceName: geminiVoiceSelect.value,
+        voiceName: effectiveVoice,
       }),
     });
 
