@@ -97,10 +97,15 @@ const task2NativeAudioState = {
   sentChunkCount: 0,
   lastVoiceAt: 0,
   heardSpeechSinceTurnStart: false,
+  speechStartedAt: 0,
+  bargeSpeechFrames: 0,
 };
 const TASK2_USE_TEXT_TURNS = false;
-const TASK2_SILENCE_RMS_THRESHOLD = 0.06;
+const TASK2_SILENCE_RMS_THRESHOLD = 0.05;
 const TASK2_SILENCE_END_MS = 800;
+const TASK2_MAX_USER_TURN_MS = 5500;
+const TASK2_BARGE_IN_RMS_THRESHOLD = 0.07;
+const TASK2_BARGE_IN_FRAMES = 4;
 let task2CaptionRecognizer = null;
 let task2CaptionActive = false;
 let task2CaptionRestartTimer = null;
@@ -765,6 +770,8 @@ function queueTask2ExaminerAudioChunk(audioBase64, mimeType) {
     task2NativeAudioState.waitingExaminer = false;
     task2NativeAudioState.sentChunkCount = 0;
     task2NativeAudioState.heardSpeechSinceTurnStart = false;
+    task2NativeAudioState.speechStartedAt = 0;
+    task2NativeAudioState.bargeSpeechFrames = 0;
     task2NativeAudioState.lastVoiceAt = Date.now();
     if (keepListeningTask[2]) {
       speakingStatus[2].textContent = "Listening (live audio)";
@@ -786,6 +793,7 @@ function triggerTask2TurnEnd() {
   if (task2NativeAudioState.sentChunkCount < 3) return;
   task2NativeAudioState.waitingExaminer = true;
   task2NativeAudioState.heardSpeechSinceTurnStart = false;
+  task2NativeAudioState.speechStartedAt = 0;
   task2LiveSocket.send(JSON.stringify({ type: "audio_stream_end" }));
 }
 
@@ -958,6 +966,8 @@ async function startTask2NativeAudioCapture() {
     task2NativeAudioState.waitingExaminer = false;
     task2NativeAudioState.sentChunkCount = 0;
     task2NativeAudioState.heardSpeechSinceTurnStart = false;
+    task2NativeAudioState.speechStartedAt = 0;
+    task2NativeAudioState.bargeSpeechFrames = 0;
     task2NativeAudioState.lastVoiceAt = Date.now();
 
     processor.onaudioprocess = (event) => {
@@ -974,7 +984,27 @@ async function startTask2NativeAudioCapture() {
         sumSquares += pcmInput[i] * pcmInput[i];
       }
       const rms = Math.sqrt(sumSquares / Math.max(1, pcmInput.length));
+      if (task2NativeAudioState.waitingExaminer) {
+        if (rms >= TASK2_BARGE_IN_RMS_THRESHOLD) {
+          task2NativeAudioState.bargeSpeechFrames += 1;
+        } else {
+          task2NativeAudioState.bargeSpeechFrames = Math.max(0, task2NativeAudioState.bargeSpeechFrames - 1);
+        }
+        if (task2NativeAudioState.bargeSpeechFrames >= TASK2_BARGE_IN_FRAMES) {
+          task2NativeAudioState.bargeSpeechFrames = 0;
+          task2NativeAudioState.waitingExaminer = false;
+          if (!task2ExaminerAudio.paused) {
+            task2ExaminerAudio.pause();
+            task2ExaminerAudio.currentTime = 0;
+          }
+          resetTask2ExaminerAudioBuffer();
+          speakingStatus[2].textContent = "Listening (live audio)";
+        }
+      }
       if (rms > TASK2_SILENCE_RMS_THRESHOLD) {
+        if (!task2NativeAudioState.heardSpeechSinceTurnStart) {
+          task2NativeAudioState.speechStartedAt = Date.now();
+        }
         task2NativeAudioState.heardSpeechSinceTurnStart = true;
         task2NativeAudioState.lastVoiceAt = Date.now();
       }
@@ -1006,7 +1036,10 @@ async function startTask2NativeAudioCapture() {
       if (TASK2_USE_TEXT_TURNS) return;
       if (task2NativeAudioState.waitingExaminer) return;
       const silenceMs = Date.now() - task2NativeAudioState.lastVoiceAt;
-      if (silenceMs >= TASK2_SILENCE_END_MS) {
+      const speakingMs = task2NativeAudioState.speechStartedAt
+        ? Date.now() - task2NativeAudioState.speechStartedAt
+        : 0;
+      if (silenceMs >= TASK2_SILENCE_END_MS || speakingMs >= TASK2_MAX_USER_TURN_MS) {
         triggerTask2TurnEnd();
       }
     }, 220);
@@ -1031,6 +1064,8 @@ function stopTask2NativeAudioCapture(fromTimeout = false) {
   task2NativeAudioState.waitingExaminer = false;
   task2NativeAudioState.sentChunkCount = 0;
   task2NativeAudioState.heardSpeechSinceTurnStart = false;
+  task2NativeAudioState.speechStartedAt = 0;
+  task2NativeAudioState.bargeSpeechFrames = 0;
   clearTask2TurnSilenceTimer();
   clearRecordingTimeout(2);
   setRecordingIndicator(2, false);

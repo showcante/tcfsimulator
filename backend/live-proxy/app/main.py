@@ -178,15 +178,23 @@ async def task2_live(ws: WebSocket) -> None:
         )
     )
     sensitivity_enum = getattr(types.SpeechConfig, "Sensitivity", None)
-    if sensitivity_enum and hasattr(sensitivity_enum, "HIGH"):
+    if (
+        sensitivity_enum
+        and hasattr(sensitivity_enum, "HIGH")
+        and hasattr(sensitivity_enum, "LOW")
+    ):
         try:
             speech_cfg = types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=VOICE)
                 ),
+                start_of_speech_sensitivity=sensitivity_enum.LOW,
                 end_of_speech_sensitivity=sensitivity_enum.HIGH,
             )
-            print("INFO: speech sensitivity configured: end_of_speech=HIGH", flush=True)
+            print(
+                "INFO: speech sensitivity configured: start_of_speech=LOW end_of_speech=HIGH",
+                flush=True,
+            )
         except Exception as sensitivity_err:
             print(f"WARN: could not set speech sensitivity: {sensitivity_err}", flush=True)
 
