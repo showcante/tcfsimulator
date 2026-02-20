@@ -61,7 +61,7 @@ function chunkTextForTTS(text) {
   return chunks.length ? chunks : [String(text || "")];
 }
 
-async function fetchWithTimeout(url, options, timeoutMs = 15000) {
+async function fetchWithTimeout(url, options, timeoutMs = 30000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -69,6 +69,10 @@ async function fetchWithTimeout(url, options, timeoutMs = 15000) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isAbortMessage(message) {
@@ -144,7 +148,7 @@ module.exports = async function handler(req, res) {
             },
           };
 
-          for (let attempt = 0; attempt < 2; attempt += 1) {
+          for (let attempt = 0; attempt < 3; attempt += 1) {
             try {
               geminiResponse = await fetchWithTimeout(
                 endpoint,
@@ -156,17 +160,18 @@ module.exports = async function handler(req, res) {
                   },
                   body: JSON.stringify(requestPayload),
                   },
-                  15000
+                  30000
                 );
-                break;
-              } catch (error) {
-                lastErrorText = `[model=${modelName} voice=${voiceName}] ${error?.message || "unknown fetch error"}`;
-                if (attempt === 0 && isAbortMessage(error?.message)) {
-                  continue;
-                }
-                break;
+              break;
+            } catch (error) {
+              lastErrorText = `[model=${modelName} voice=${voiceName}] ${error?.message || "unknown fetch error"}`;
+              if (attempt < 2 && isAbortMessage(error?.message)) {
+                await sleep(300 * (attempt + 1));
+                continue;
               }
+              break;
             }
+          }
 
           if (geminiResponse && geminiResponse.ok) break;
           if (geminiResponse && !geminiResponse.ok) {
