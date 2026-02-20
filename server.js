@@ -314,6 +314,13 @@ function extractTextFromGeminiResponse(data) {
   return texts.join("\n").trim();
 }
 
+function looksIncomplete(text) {
+  const clean = String(text || "").trim();
+  if (!clean) return true;
+  if (clean.split(/\s+/).length < 5) return true;
+  return !/[.!?…]["')\]]?$/.test(clean);
+}
+
 async function handleTask2Examiner(req, res) {
   if (!GEMINI_API_KEY) {
     sendJson(res, 500, { error: "Missing GEMINI_API_KEY in server environment." });
@@ -370,30 +377,40 @@ async function handleTask2Examiner(req, res) {
     ].join("\n");
 
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`;
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        generationConfig: {
-          temperature: 0.6,
-          topP: 0.9,
-          maxOutputTokens: 180,
+    const callGemini = async (prompt, temperature = 0.4) => {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": GEMINI_API_KEY,
         },
-      }),
-    });
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature,
+            topP: 0.9,
+            maxOutputTokens: 260,
+          },
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(`Gemini examiner request failed: ${JSON.stringify(data)}`);
+      }
+      return extractTextFromGeminiResponse(data);
+    };
 
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      sendJson(res, 502, { error: `Gemini examiner request failed: ${JSON.stringify(data)}` });
-      return;
+    let reply = await callGemini(userPrompt, 0.4);
+    if (looksIncomplete(reply)) {
+      const repairPrompt = [
+        userPrompt,
+        "",
+        `Ta reponse precedente etait incomplete: "${reply}"`,
+        "Reecris une reponse complete en 1 a 2 phrases, puis termine par une question courte.",
+      ].join("\n");
+      reply = await callGemini(repairPrompt, 0.2);
     }
-
-    const reply = extractTextFromGeminiResponse(data);
     if (!reply) {
       sendJson(res, 502, { error: "Gemini examiner response contained no text." });
       return;
