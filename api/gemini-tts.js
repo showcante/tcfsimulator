@@ -43,7 +43,7 @@ function pcm16ToWavBuffer(pcmBuffer, sampleRate = 24000, channels = 1) {
   return wav;
 }
 
-async function fetchWithTimeout(url, options, timeoutMs = 30000) {
+async function fetchWithTimeout(url, options, timeoutMs = 60000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -118,7 +118,7 @@ module.exports = async function handler(req, res) {
             "x-goog-api-key": GEMINI_API_KEY,
           },
           body: JSON.stringify(requestPayload),
-        }, 30000);
+        }, 60000);
 
         if (geminiResponse.ok) break;
         const errText = await geminiResponse.text();

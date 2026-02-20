@@ -590,7 +590,7 @@ function startMicMeter(task, stream) {
   meter.rafId = requestAnimationFrame(loop);
 }
 
-async function fetchJsonWithTimeout(url, init = {}, timeoutMs = 25000) {
+async function fetchJsonWithTimeout(url, init = {}, timeoutMs = 60000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -623,21 +623,34 @@ async function playTextWithGemini(task, text) {
       warnedKoreFallback = true;
       speakingStatus[task].textContent = "Kore unavailable, using Aoede";
     }
-    const response = await fetchJsonWithTimeout("/api/gemini-tts", {
+    const requestPayload = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text: cleanText,
         voiceName: effectiveVoice,
       }),
-    }, 25000);
+    };
+
+    let response;
+    try {
+      response = await fetchJsonWithTimeout("/api/gemini-tts", requestPayload, 60000);
+    } catch (error) {
+      const message = String(error?.message || "");
+      if (/AbortError|aborted/i.test(message)) {
+        speakingStatus[task].textContent = "Examiner audio retrying...";
+        response = await fetchJsonWithTimeout("/api/gemini-tts", requestPayload, 60000);
+      } else {
+        throw error;
+      }
+    }
 
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({}));
       throw new Error(errorBody.error || `TTS request failed (${response.status})`);
     }
 
-    const audioBlob = await readBlobWithTimeout(response, 15000);
+    const audioBlob = await readBlobWithTimeout(response, 30000);
     if (!audioBlob || audioBlob.size < 1024) {
       throw new Error(`empty audio blob (${audioBlob ? audioBlob.size : 0} bytes)`);
     }
@@ -1366,14 +1379,14 @@ async function playPromptWithGemini(task) {
         text: speakingPrompts[task],
         voiceName: effectiveVoice,
       }),
-    }, 12000);
+    }, 60000);
 
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({}));
       throw new Error(errorBody.error || `TTS request failed (${response.status})`);
     }
 
-    const audioBlob = await readBlobWithTimeout(response, 10000);
+    const audioBlob = await readBlobWithTimeout(response, 30000);
     if (!audioBlob || audioBlob.size < 1024) {
       throw new Error(`empty audio blob (${audioBlob ? audioBlob.size : 0} bytes)`);
     }
