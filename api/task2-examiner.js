@@ -39,21 +39,21 @@ function detectTopic(userText, taskPrompt) {
 
 function buildFallbackReply(topic) {
   if (topic === "nourriture") {
-    return "Pour la nourriture, chacun apporte un petit plat ou une boisson a partager, et je m'occupe des assiettes, des verres et des serviettes. Vous preferez apporter quelque chose de sale ou de sucre ?";
+    return "Pour la nourriture, chacun apporte un petit plat ou une boisson a partager, et je m'occupe des assiettes, des verres et des serviettes.";
   }
   if (topic === "horaire") {
-    return "La fete commence samedi vers 18h et se termine vers 22h, donc vous pouvez arriver a l'heure qui vous convient. Vous pensez venir plutot en debut ou en fin de soiree ?";
+    return "La fete commence samedi vers 18h et se termine vers 22h, donc vous pouvez arriver a l'heure qui vous convient.";
   }
   if (topic === "lieu") {
-    return "La fete aura lieu dans la cour commune de l'immeuble, juste a cote de l'entree principale, et c'est facile a trouver. Voulez-vous que je vous envoie l'adresse exacte ?";
+    return "La fete aura lieu dans la cour commune de l'immeuble, juste a cote de l'entree principale, et c'est facile a trouver.";
   }
   if (topic === "prix") {
-    return "La participation est gratuite, chacun apporte seulement un petit quelque chose a partager pour simplifier l'organisation. Cela vous convient-il comme principe ?";
+    return "La participation est gratuite, chacun apporte seulement un petit quelque chose a partager pour simplifier l'organisation.";
   }
   if (topic === "transport") {
-    return "Le plus simple est de venir en bus, et il y a aussi quelques places de stationnement dans la rue voisine. Vous viendrez plutot en transport en commun ou en voiture ?";
+    return "Le plus simple est de venir en bus, et il y a aussi quelques places de stationnement dans la rue voisine.";
   }
-  return "Bien sur, je peux vous donner les details pratiques de la fete des voisins pour que vous puissiez vous organiser facilement. Quelle information voulez-vous en premier: le lieu, les horaires ou ce qu'il faut apporter ?";
+  return "Bien sur, je peux vous donner les details pratiques de la fete des voisins pour que vous puissiez vous organiser facilement.";
 }
 
 function isTopicGrounded(reply, topic) {
@@ -121,7 +121,7 @@ module.exports = async function handler(req, res) {
       "1) Reponds uniquement en francais.",
       "2) Donne une reponse concise (1 a 3 phrases).",
       "3) Fournis des informations concretes liees a la consigne.",
-      "4) Termine toujours par une courte question de relance.",
+      "4) Reponds directement a la question du candidat, sans poser de question en retour.",
       "5) N'evalue pas le candidat et ne donne pas de score pendant l'interaction.",
     ].join("\n");
 
@@ -136,7 +136,7 @@ module.exports = async function handler(req, res) {
       "",
       "Reponds maintenant comme examinateur.",
       "IMPORTANT: Reponse complete uniquement, pas de phrase coupee.",
-      "Format strict: exactement 2 phrases maximum, puis une courte question finale.",
+      "Format strict: exactement 1 ou 2 phrases completes.",
     ].join("\n");
 
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`;
@@ -171,7 +171,7 @@ module.exports = async function handler(req, res) {
         "",
         `Ta reponse precedente etait incomplete: "${examinerText}"`,
         `Sujet attendu: ${topic}.`,
-        "Reecris une reponse complete, concrete et utile en 2 phrases maximum, puis termine par une question courte.",
+        "Reecris une reponse complete, concrete et utile en 1 ou 2 phrases maximum, sans poser de question.",
         "Interdiction de phrase tronquee.",
       ].join("\n");
       examinerText = normalizeExaminerReply(await callGemini(repairPrompt, 0.1));

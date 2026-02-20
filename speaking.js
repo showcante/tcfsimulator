@@ -621,7 +621,21 @@ async function playTextWithGemini(task, text) {
 
     speakingStatus[task].textContent = "Idle";
   } catch (error) {
-    speakingStatus[task].textContent = "Examiner voice unavailable (text only)";
+    // Fallback to browser TTS so examiner is still heard when server TTS playback fails.
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.lang = getRecognitionLanguage() || "fr-FR";
+      utterance.rate = 0.95;
+      utterance.pitch = 1.0;
+      utterance.onend = () => {
+        speakingStatus[task].textContent = "Idle";
+      };
+      speakingStatus[task].textContent = "Examiner speaking...";
+      window.speechSynthesis.speak(utterance);
+    } catch (_fallbackError) {
+      speakingStatus[task].textContent = "Examiner voice unavailable (text only)";
+    }
   }
 }
 
