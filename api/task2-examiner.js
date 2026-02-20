@@ -98,7 +98,6 @@ module.exports = async function handler(req, res) {
     const taskPrompt = (parsed.taskPrompt || "").trim();
     const userText = (parsed.userText || "").trim();
     const history = Array.isArray(parsed.history) ? parsed.history : [];
-    const topic = detectTopic(userText);
 
     if (!taskPrompt) {
       sendJson(res, 400, { error: "Missing taskPrompt." });
@@ -126,14 +125,14 @@ module.exports = async function handler(req, res) {
 
     const systemInstruction = [
       "Tu es examinateur TCF Canada - expression orale - Tache 2.",
-      "Le candidat doit poser des questions; tu dois rester passif.",
-      "REGLES ABSOLUES:",
-      "1) Tu ne poses jamais de question au candidat.",
-      "2) Tu ne demandes jamais ce qu'il veut savoir.",
+      "Le candidat doit te poser des questions pour obtenir des informations basees sur la consigne.",
+      "REGLES ABSOLUES ET STRICTES:",
+      "1) Tu ne dois jamais poser de question au candidat.",
+      "2) Tu ne dois jamais dire 'Comment puis-je vous aider ?' ou equivalent.",
       "3) Si le candidat dit seulement 'Bonjour', reponds uniquement 'Bonjour, je vous ecoute.'.",
-      "4) Reponds en francais, en 1 ou 2 phrases maximum, uniquement a la question posee.",
-      "5) Ne donne pas toutes les informations d'un coup; reponds seulement au point demande.",
-      "6) N'evalue pas le candidat et ne donne pas de score.",
+      "4) Reponds de maniere concise (1 ou 2 phrases) uniquement a la question posee.",
+      "5) Ne donne pas toutes les informations de la consigne d'un coup.",
+      "6) Reste passif et laisse le candidat diriger la conversation.",
     ].join("\n");
 
     const userPrompt = [
@@ -145,10 +144,8 @@ module.exports = async function handler(req, res) {
       "Derniere intervention du candidat:",
       userText,
       "",
-      "Reponds maintenant comme examinateur.",
-      "IMPORTANT: Reponse complete uniquement, pas de phrase coupee.",
-      "Format strict: exactement 1 ou 2 phrases completes.",
-      "INTERDICTION: aucune phrase interrogative dans la reponse.",
+      "RAPPEL CRITIQUE: Ne pose aucune question dans ta reponse.",
+      "Contente-toi de repondre de maniere complete et naturelle en 1 ou 2 phrases.",
     ].join("\n");
 
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`;
@@ -176,24 +173,7 @@ module.exports = async function handler(req, res) {
       return extractTextFromGeminiResponse(data);
     };
 
-    let examinerText = normalizeExaminerReply(await callGemini(userPrompt, 0.25));
-    if (looksIncomplete(examinerText) || !isTopicGrounded(examinerText, topic)) {
-      const repairPrompt = [
-        userPrompt,
-        "",
-        `Ta reponse precedente etait incomplete: "${examinerText}"`,
-        `Sujet attendu: ${topic}.`,
-        "Reecris une reponse complete, concrete et utile en 1 ou 2 phrases maximum, sans poser de question.",
-        "Interdiction de phrase tronquee.",
-        "Interdiction de phrase interrogative.",
-      ].join("\n");
-      examinerText = normalizeExaminerReply(await callGemini(repairPrompt, 0.1));
-    }
-
-    if (looksIncomplete(examinerText) || !isTopicGrounded(examinerText, topic)) {
-      examinerText = buildFallbackReply(topic);
-    }
-
+    const examinerText = String(await callGemini(userPrompt, 0.4) || "").trim();
     if (!examinerText) {
       sendJson(res, 502, { error: "Gemini examiner response contained no text." });
       return;
