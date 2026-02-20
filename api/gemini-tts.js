@@ -43,25 +43,7 @@ function pcm16ToWavBuffer(pcmBuffer, sampleRate = 24000, channels = 1) {
   return wav;
 }
 
-function chunkTextForTTS(text) {
-  const sentences = String(text || "").match(/[^.!?]+[.!?]*/g) || [String(text || "")];
-  const chunks = [];
-  let current = "";
-  for (let sentence of sentences) {
-    sentence = sentence.trim();
-    if (!sentence) continue;
-    if (current.length + sentence.length < 90) {
-      current += (current ? " " : "") + sentence;
-    } else {
-      if (current) chunks.push(current);
-      current = sentence;
-    }
-  }
-  if (current) chunks.push(current);
-  return chunks.length ? chunks : [String(text || "")];
-}
-
-async function fetchWithTimeout(url, options, timeoutMs = 30000) {
+async function fetchWithTimeout(url, options, timeoutMs = 60000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -71,19 +53,6 @@ async function fetchWithTimeout(url, options, timeoutMs = 30000) {
   }
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isAbortMessage(message) {
-  return /aborted|AbortError|operation was aborted/i.test(String(message || ""));
-}
-
-function shouldSkipModelForAudio(errorText) {
-  const text = String(errorText || "").toLowerCase();
-  return text.includes("does not support the requested response modalities") && text.includes("audio");
-}
-
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     sendJson(res, 405, { error: "Method not allowed" });
@@ -91,7 +60,7 @@ module.exports = async function handler(req, res) {
   }
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  const GEMINI_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash";
+  const GEMINI_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
 
   if (!GEMINI_API_KEY) {
     sendJson(res, 500, { error: "Missing GEMINI_API_KEY in server environment." });
@@ -108,108 +77,79 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    const modelsToTry = [...new Set([GEMINI_MODEL, "gemini-2.5-flash", "gemini-2.5-flash-preview-tts"])].filter(Boolean);
-    const voicesToTry = ["Aoede", requestedVoice].filter(
+    const modelsToTry = [GEMINI_MODEL, "gemini-2.5-flash-preview-tts"];
+    const voicesToTry = [requestedVoice, "Aoede", "Kore"].filter(
       (voice, index, arr) => voice && arr.indexOf(voice) === index
     );
-    const textChunks = chunkTextForTTS(text);
-    let combinedPcm = Buffer.alloc(0);
+    let geminiResponse = null;
     let lastErrorText = "";
 
-    for (const chunk of textChunks) {
-      let geminiResponse = null;
-      let chunkAudioBuffer = null;
-
-      for (const modelName of modelsToTry) {
-        for (const voiceName of voicesToTry) {
-          const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
-          const requestPayload = {
-            contents: [
-              {
-                parts: [
-                  {
-                    text: `Lis ce texte exactement, sans ajouter de mots.\nTexte:\n${chunk}`,
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              responseModalities: ["AUDIO"],
-              temperature: 0,
-              speechConfig: {
-                voiceConfig: {
-                  prebuiltVoiceConfig: {
-                    voiceName,
-                  },
+    for (const modelName of modelsToTry) {
+      for (const voiceName of voicesToTry) {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
+        const requestPayload = {
+          contents: [
+            {
+              parts: [
+                {
+                  text: `Lis ce texte exactement, sans ajouter de mots.\nTexte:\n${text}`,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            temperature: 0,
+            speechConfig: {
+              languageCode: "fr-CA",
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName,
                 },
               },
             },
-          };
+          },
+        };
 
-          for (let attempt = 0; attempt < 2; attempt += 1) {
-            try {
-              geminiResponse = await fetchWithTimeout(
-                endpoint,
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "x-goog-api-key": GEMINI_API_KEY,
-                  },
-                  body: JSON.stringify(requestPayload),
-                  },
-                  12000
-                );
-              break;
-            } catch (error) {
-              lastErrorText = `[model=${modelName} voice=${voiceName}] ${error?.message || "unknown fetch error"}`;
-              if (attempt < 1 && isAbortMessage(error?.message)) {
-                await sleep(300 * (attempt + 1));
-                continue;
-              }
-              break;
-            }
-          }
+        geminiResponse = await fetchWithTimeout(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY,
+          },
+          body: JSON.stringify(requestPayload),
+        }, 60000);
 
-          if (geminiResponse && geminiResponse.ok) break;
-          if (geminiResponse && !geminiResponse.ok) {
-            const errText = await geminiResponse.text().catch(() => "");
-            lastErrorText = `[model=${modelName} voice=${voiceName}] HTTP ${geminiResponse.status} ${errText}`;
-            if (shouldSkipModelForAudio(errText)) {
-              continue;
-            }
-          }
-        }
-        if (geminiResponse?.ok) break;
+        if (geminiResponse.ok) break;
+        const errText = await geminiResponse.text();
+        lastErrorText = `[model=${modelName} voice=${voiceName}] ${errText}`;
       }
-
-      if (!geminiResponse || !geminiResponse.ok) {
-        sendJson(res, 502, { error: buildGeminiErrorMessage(lastErrorText) });
-        return;
-      }
-
-      const data = await geminiResponse.json();
-      const inlineData = data?.candidates?.[0]?.content?.parts?.find((part) => part.inlineData)?.inlineData;
-      if (!inlineData?.data) {
-        sendJson(res, 502, { error: "Gemini response did not include audio data for a chunk." });
-        return;
-      }
-
-      let rawAudio = Buffer.from(inlineData.data, "base64");
-      const mimeType = inlineData.mimeType || "audio/pcm";
-      if (mimeType.includes("wav")) {
-        rawAudio = rawAudio.slice(44);
-      }
-      chunkAudioBuffer = rawAudio;
-
-      if (!chunkAudioBuffer || chunkAudioBuffer.length === 0) {
-        sendJson(res, 502, { error: "Gemini returned empty audio for a chunk." });
-        return;
-      }
-      combinedPcm = Buffer.concat([combinedPcm, chunkAudioBuffer]);
+      if (geminiResponse?.ok) break;
     }
 
-    const wavAudio = pcm16ToWavBuffer(combinedPcm, 24000, 1);
+    if (!geminiResponse.ok) {
+      sendJson(res, 502, { error: buildGeminiErrorMessage(lastErrorText) });
+      return;
+    }
+
+    const data = await geminiResponse.json();
+    const inlineData = data?.candidates?.[0]?.content?.parts?.find((part) => part.inlineData)?.inlineData;
+
+    if (!inlineData?.data) {
+      sendJson(res, 502, { error: "Gemini response did not include audio data." });
+      return;
+    }
+
+    const rawAudio = Buffer.from(inlineData.data, "base64");
+    const mimeType = inlineData.mimeType || "audio/pcm";
+
+    if (mimeType.includes("wav")) {
+      res.setHeader("Content-Type", "audio/wav");
+      res.status(200).send(rawAudio);
+      return;
+    }
+
+    const wavAudio = pcm16ToWavBuffer(rawAudio, 24000, 1);
     res.setHeader("Content-Type", "audio/wav");
     res.status(200).send(wavAudio);
   } catch (error) {
