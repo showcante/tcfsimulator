@@ -141,7 +141,7 @@ function chunkTextForTTS(text) {
   return chunks.length ? chunks : [String(text || "")];
 }
 
-async function fetchWithTimeout(url, options, timeoutMs = 120000) {
+async function fetchWithTimeout(url, options, timeoutMs = 15000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -177,7 +177,7 @@ async function handleGeminiTts(req, res) {
         return;
       }
 
-      const modelsToTry = [GEMINI_MODEL, "gemini-2.5-flash-preview-tts"];
+      const modelsToTry = [...new Set([GEMINI_MODEL, "gemini-2.5-flash-preview-tts", "gemini-2.5-flash", "gemini-2.0-flash"])];
       const voicesToTry = [requestedVoice, "Aoede", "Kore"].filter(
         (voice, index, arr) => voice && arr.indexOf(voice) === index
       );
@@ -206,7 +206,6 @@ async function handleGeminiTts(req, res) {
                 responseModalities: ["AUDIO"],
                 temperature: 0,
                 speechConfig: {
-                  languageCode: "fr-CA",
                   voiceConfig: {
                     prebuiltVoiceConfig: {
                       voiceName,
@@ -227,21 +226,24 @@ async function handleGeminiTts(req, res) {
                       "x-goog-api-key": GEMINI_API_KEY,
                     },
                     body: JSON.stringify(requestPayload),
-                  },
-                  45000
-                );
-                break;
-              } catch (error) {
-                if (attempt === 0 && isAbortMessage(error?.message)) {
-                  continue;
+                    },
+                    15000
+                  );
+                  break;
+                } catch (error) {
+                  lastErrorText = `[model=${modelName} voice=${voiceName}] ${error?.message || "unknown fetch error"}`;
+                  if (attempt === 0 && isAbortMessage(error?.message)) {
+                    continue;
+                  }
+                  break;
                 }
-                throw error;
               }
-            }
 
-            if (geminiResponse.ok) break;
-            const errText = await geminiResponse.text();
-            lastErrorText = `[model=${modelName} voice=${voiceName}] ${errText}`;
+            if (geminiResponse && geminiResponse.ok) break;
+            if (geminiResponse && !geminiResponse.ok) {
+              const errText = await geminiResponse.text().catch(() => "");
+              lastErrorText = `[model=${modelName} voice=${voiceName}] HTTP ${geminiResponse.status} ${errText}`;
+            }
           }
           if (geminiResponse?.ok) break;
         }
