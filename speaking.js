@@ -627,7 +627,22 @@ async function playTextWithGemini(task, text) {
     player.currentTime = 0;
     player.muted = false;
     player.volume = 1;
+    player.onended = null;
+    player.onerror = null;
     player.src = task2ExaminerAudioUrl;
+
+    const finish = () => {
+      speakingStatus[task].textContent = "Idle";
+    };
+    const watchdog = setTimeout(finish, 15000);
+    player.onended = () => {
+      clearTimeout(watchdog);
+      finish();
+    };
+    player.onerror = () => {
+      clearTimeout(watchdog);
+      speakingStatus[task].textContent = "Examiner voice unavailable (text only)";
+    };
 
     const playPromise = player.play();
     if (playPromise && typeof playPromise.then === "function") {
@@ -638,10 +653,6 @@ async function playTextWithGemini(task, text) {
         }),
       ]);
     }
-
-    player.onended = () => {
-      speakingStatus[task].textContent = "Idle";
-    };
   } catch (error) {
     const message = String(error?.message || "");
     if (/NotAllowedError|playback timeout/i.test(message)) {
@@ -1346,13 +1357,24 @@ async function playPromptWithGemini(task) {
 
     promptAudioUrls[task] = URL.createObjectURL(audioBlob);
     const player = promptAudioPlayers[task];
+    player.onended = null;
+    player.onerror = null;
     player.src = promptAudioUrls[task];
+    const finish = () => {
+      speakingStatus[task].textContent = "Idle";
+    };
+    const watchdog = setTimeout(finish, 15000);
+    player.onended = () => {
+      clearTimeout(watchdog);
+      finish();
+    };
+    player.onerror = () => {
+      clearTimeout(watchdog);
+      speakingStatus[task].textContent = "Gemini TTS error";
+    };
     await player.play();
 
     speakingStatus[task].textContent = "Playing (Gemini)";
-    player.onended = () => {
-      speakingStatus[task].textContent = "Idle";
-    };
   } catch (error) {
     speakingStatus[task].textContent = "Gemini TTS error";
     alert(`Gemini TTS failed: ${error.message}`);
