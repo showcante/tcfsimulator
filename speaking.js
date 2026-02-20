@@ -590,7 +590,7 @@ function startMicMeter(task, stream) {
   meter.rafId = requestAnimationFrame(loop);
 }
 
-async function fetchJsonWithTimeout(url, init = {}, timeoutMs = 12000) {
+async function fetchJsonWithTimeout(url, init = {}, timeoutMs = 25000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -611,7 +611,7 @@ async function readBlobWithTimeout(response, timeoutMs = 10000) {
 
 async function playTextWithGemini(task, text) {
   const cleanText = (text || "").trim();
-  if (!cleanText) return;
+  if (!cleanText) return false;
   try {
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
@@ -630,14 +630,14 @@ async function playTextWithGemini(task, text) {
         text: cleanText,
         voiceName: effectiveVoice,
       }),
-    }, 12000);
+    }, 25000);
 
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({}));
       throw new Error(errorBody.error || `TTS request failed (${response.status})`);
     }
 
-    const audioBlob = await readBlobWithTimeout(response, 10000);
+    const audioBlob = await readBlobWithTimeout(response, 15000);
     if (!audioBlob || audioBlob.size < 1024) {
       throw new Error(`empty audio blob (${audioBlob ? audioBlob.size : 0} bytes)`);
     }
@@ -671,17 +671,19 @@ async function playTextWithGemini(task, text) {
       await Promise.race([
         playPromise,
         new Promise((_, reject) => {
-          setTimeout(() => reject(new Error("Examiner audio playback timeout")), 3500);
+          setTimeout(() => reject(new Error("Examiner audio playback timeout")), 6000);
         }),
       ]);
     }
+    return true;
   } catch (error) {
     const message = String(error?.message || "");
     if (/NotAllowedError|AbortError|playback timeout/i.test(message)) {
       speakingStatus[task].textContent = "Examiner audio ready - click play on the player";
-      return;
+      return false;
     }
     speakingStatus[task].textContent = `Examiner audio error: ${message.slice(0, 60)}`;
+    return false;
   }
 }
 
@@ -1658,8 +1660,10 @@ async function sendTask2ReliableExaminerTurn(userText) {
 
     const examinerTag = currentLang() === "fr" ? "Examinateur" : "Examiner";
     transcriptFields[2].value = `${transcriptFields[2].value}\n[${examinerTag}] ${reply}`.trim() + "\n";
-    await playTextWithGemini(2, reply);
-    speakingStatus[2].textContent = "Idle";
+    const audioPlayed = await playTextWithGemini(2, reply);
+    if (audioPlayed) {
+      speakingStatus[2].textContent = "Idle";
+    }
   } catch (error) {
     speakingStatus[2].textContent = "Examiner error";
     alert(`Task 2 examiner failed: ${error.message}`);
