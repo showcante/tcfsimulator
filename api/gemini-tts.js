@@ -50,7 +50,7 @@ function chunkTextForTTS(text) {
   for (let sentence of sentences) {
     sentence = sentence.trim();
     if (!sentence) continue;
-    if (current.length + sentence.length < 200) {
+    if (current.length + sentence.length < 120) {
       current += (current ? " " : "") + sentence;
     } else {
       if (current) chunks.push(current);
@@ -61,7 +61,7 @@ function chunkTextForTTS(text) {
   return chunks.length ? chunks : [String(text || "")];
 }
 
-async function fetchWithTimeout(url, options, timeoutMs = 60000) {
+async function fetchWithTimeout(url, options, timeoutMs = 120000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -144,7 +144,7 @@ module.exports = async function handler(req, res) {
               },
               body: JSON.stringify(requestPayload),
             },
-            60000
+            120000
           );
 
           if (geminiResponse.ok) break;

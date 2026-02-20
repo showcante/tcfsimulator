@@ -590,7 +590,7 @@ function startMicMeter(task, stream) {
   meter.rafId = requestAnimationFrame(loop);
 }
 
-async function fetchJsonWithTimeout(url, init = {}, timeoutMs = 60000) {
+async function fetchJsonWithTimeout(url, init = {}, timeoutMs = 180000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -634,12 +634,12 @@ async function playTextWithGemini(task, text) {
 
     let response;
     try {
-      response = await fetchJsonWithTimeout("/api/gemini-tts", requestPayload, 60000);
+      response = await fetchJsonWithTimeout("/api/gemini-tts", requestPayload, 180000);
     } catch (error) {
       const message = String(error?.message || "");
       if (/AbortError|aborted/i.test(message)) {
         speakingStatus[task].textContent = "Examiner audio retrying...";
-        response = await fetchJsonWithTimeout("/api/gemini-tts", requestPayload, 60000);
+        response = await fetchJsonWithTimeout("/api/gemini-tts", requestPayload, 180000);
       } else {
         throw error;
       }
@@ -1379,7 +1379,7 @@ async function playPromptWithGemini(task) {
         text: speakingPrompts[task],
         voiceName: effectiveVoice,
       }),
-    }, 60000);
+    }, 180000);
 
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({}));
