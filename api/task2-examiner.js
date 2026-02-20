@@ -27,14 +27,19 @@ function normalize(input) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-function detectTopic(userText, taskPrompt) {
-  const text = normalize(`${userText} ${taskPrompt}`);
+function detectTopic(userText) {
+  const text = normalize(userText);
   if (/(nourriture|repas|boisson|apporter|manger|plat)/.test(text)) return "nourriture";
   if (/(horaire|heure|quand|debut|fin|date)/.test(text)) return "horaire";
   if (/(lieu|adresse|endroit|ou|quartier)/.test(text)) return "lieu";
   if (/(prix|tarif|cout|gratuit|payer|budget)/.test(text)) return "prix";
   if (/(transport|bus|metro|stationnement|parking|voiture)/.test(text)) return "transport";
   return "general";
+}
+
+function isGreetingOnly(userText) {
+  const text = normalize(userText).replace(/[.!?]/g, " ").trim();
+  return /^(bonjour|salut|bonsoir|coucou|allo|allo)\b/.test(text) && text.split(/\s+/).length <= 3;
 }
 
 function buildFallbackReply(topic) {
@@ -93,7 +98,7 @@ module.exports = async function handler(req, res) {
     const taskPrompt = (parsed.taskPrompt || "").trim();
     const userText = (parsed.userText || "").trim();
     const history = Array.isArray(parsed.history) ? parsed.history : [];
-    const topic = detectTopic(userText, taskPrompt);
+    const topic = detectTopic(userText);
 
     if (!taskPrompt) {
       sendJson(res, 400, { error: "Missing taskPrompt." });
@@ -101,6 +106,11 @@ module.exports = async function handler(req, res) {
     }
     if (!userText) {
       sendJson(res, 400, { error: "Missing userText." });
+      return;
+    }
+
+    if (isGreetingOnly(userText)) {
+      sendJson(res, 200, { reply: "Bonjour, je vous ecoute." });
       return;
     }
 
@@ -116,13 +126,14 @@ module.exports = async function handler(req, res) {
 
     const systemInstruction = [
       "Tu es examinateur TCF Canada - expression orale - Tache 2.",
-      "Tu dois simuler un dialogue naturel et utile.",
-      "Regles:",
-      "1) Reponds uniquement en francais.",
-      "2) Donne une reponse concise (1 a 3 phrases).",
-      "3) Fournis des informations concretes liees a la consigne.",
-      "4) Reponds directement a la question du candidat, sans poser de question en retour.",
-      "5) N'evalue pas le candidat et ne donne pas de score pendant l'interaction.",
+      "Le candidat doit poser des questions; tu dois rester passif.",
+      "REGLES ABSOLUES:",
+      "1) Tu ne poses jamais de question au candidat.",
+      "2) Tu ne demandes jamais ce qu'il veut savoir.",
+      "3) Si le candidat dit seulement 'Bonjour', reponds uniquement 'Bonjour, je vous ecoute.'.",
+      "4) Reponds en francais, en 1 ou 2 phrases maximum, uniquement a la question posee.",
+      "5) Ne donne pas toutes les informations d'un coup; reponds seulement au point demande.",
+      "6) N'evalue pas le candidat et ne donne pas de score.",
     ].join("\n");
 
     const userPrompt = [
@@ -137,6 +148,7 @@ module.exports = async function handler(req, res) {
       "Reponds maintenant comme examinateur.",
       "IMPORTANT: Reponse complete uniquement, pas de phrase coupee.",
       "Format strict: exactement 1 ou 2 phrases completes.",
+      "INTERDICTION: aucune phrase interrogative dans la reponse.",
     ].join("\n");
 
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`;
@@ -173,6 +185,7 @@ module.exports = async function handler(req, res) {
         `Sujet attendu: ${topic}.`,
         "Reecris une reponse complete, concrete et utile en 1 ou 2 phrases maximum, sans poser de question.",
         "Interdiction de phrase tronquee.",
+        "Interdiction de phrase interrogative.",
       ].join("\n");
       examinerText = normalizeExaminerReply(await callGemini(repairPrompt, 0.1));
     }
