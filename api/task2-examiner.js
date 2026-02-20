@@ -10,6 +10,15 @@ function extractTextFromGeminiResponse(data) {
   return texts.join("\n").trim();
 }
 
+function seemsCutOff(text) {
+  const clean = String(text || "").trim();
+  if (!clean) return true;
+  if (!/[.!?…]["')\]]?$/.test(clean)) return true;
+  if (/\b(a|au|aux|de|des|du|la|le|les|un|une|et|ou|pour|avec|sans|vers|chez|a)\s*$/i.test(clean)) return true;
+  if (/\b\d+\s*$/i.test(clean)) return true;
+  return false;
+}
+
 function looksIncomplete(text) {
   const clean = String(text || "").trim();
   if (!clean) return true;
@@ -162,7 +171,7 @@ module.exports = async function handler(req, res) {
           generationConfig: {
             temperature,
             topP: 0.9,
-            maxOutputTokens: 260,
+            maxOutputTokens: 320,
           },
         }),
       });
@@ -173,7 +182,19 @@ module.exports = async function handler(req, res) {
       return extractTextFromGeminiResponse(data);
     };
 
-    const examinerText = String(await callGemini(userPrompt, 0.4) || "").trim();
+    let examinerText = String(await callGemini(userPrompt, 0.35) || "").trim();
+    if (seemsCutOff(examinerText)) {
+      const completionPrompt = [
+        "Question du candidat:",
+        userText,
+        "",
+        `Reponse inachevee a corriger: "${examinerText}"`,
+        "",
+        "Reecris une reponse complete en 1 ou 2 phrases, meme sens, sans poser de question.",
+      ].join("\n");
+      examinerText = String(await callGemini(completionPrompt, 0.2) || "").trim();
+    }
+
     if (!examinerText) {
       sendJson(res, 502, { error: "Gemini examiner response contained no text." });
       return;
