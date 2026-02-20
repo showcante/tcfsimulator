@@ -123,6 +123,16 @@ function pcm16ToWavBuffer(pcmBuffer, sampleRate = 24000, channels = 1) {
   return wav;
 }
 
+async function fetchWithTimeout(url, options, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function handleGeminiTts(req, res) {
   if (!GEMINI_API_KEY) {
     sendJson(res, 500, { error: "Missing GEMINI_API_KEY in server environment." });
@@ -179,14 +189,14 @@ async function handleGeminiTts(req, res) {
             },
           };
 
-          geminiResponse = await fetch(endpoint, {
+          geminiResponse = await fetchWithTimeout(endpoint, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               "x-goog-api-key": GEMINI_API_KEY,
             },
             body: JSON.stringify(requestPayload),
-          });
+          }, 15000);
 
           if (geminiResponse.ok) break;
           const errText = await geminiResponse.text();

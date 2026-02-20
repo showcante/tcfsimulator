@@ -590,6 +590,16 @@ function startMicMeter(task, stream) {
   meter.rafId = requestAnimationFrame(loop);
 }
 
+async function fetchJsonWithTimeout(url, init = {}, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function playTextWithGemini(task, text) {
   const cleanText = (text || "").trim();
   if (!cleanText) return;
@@ -604,14 +614,14 @@ async function playTextWithGemini(task, text) {
       warnedKoreFallback = true;
       speakingStatus[task].textContent = "Kore unavailable, using Aoede";
     }
-    const response = await fetch("/api/gemini-tts", {
+    const response = await fetchJsonWithTimeout("/api/gemini-tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text: cleanText,
         voiceName: effectiveVoice,
       }),
-    });
+    }, 12000);
 
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({}));
@@ -655,7 +665,7 @@ async function playTextWithGemini(task, text) {
     }
   } catch (error) {
     const message = String(error?.message || "");
-    if (/NotAllowedError|playback timeout/i.test(message)) {
+    if (/NotAllowedError|AbortError|playback timeout/i.test(message)) {
       speakingStatus[task].textContent = "Examiner audio ready - click play on the player";
       return;
     }
@@ -1335,14 +1345,14 @@ async function playPromptWithGemini(task) {
   }
 
   try {
-    const response = await fetch("/api/gemini-tts", {
+    const response = await fetchJsonWithTimeout("/api/gemini-tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text: speakingPrompts[task],
         voiceName: effectiveVoice,
       }),
-    });
+    }, 12000);
 
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({}));
