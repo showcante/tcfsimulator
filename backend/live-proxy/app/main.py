@@ -99,7 +99,7 @@ async def health() -> Dict[str, Any]:
     return {"ok": True, "model": MODEL, "location": LOCATION}
 
 
-async def stream_vertex_to_browser(session: Any, ws: WebSocket) -> None:
+async def stream_vertex_to_browser(session: Any, ws: WebSocket, turn_state: Dict[str, Any]) -> None:
     print("INFO: vertex stream reader started", flush=True)
     async for message in session.receive():
         try:
@@ -151,6 +151,7 @@ async def stream_vertex_to_browser(session: Any, ws: WebSocket) -> None:
 
             if getattr(server_content, "turn_complete", False):
                 print("INFO: vertex turn_complete", flush=True)
+                turn_state["awaiting_model_turn"] = False
                 await ws.send_json({"type": "examiner_audio_end"})
         except Exception as stream_err:
             print(f"WARN: stream loop error: {stream_err}", flush=True)
@@ -184,7 +185,8 @@ async def task2_live(ws: WebSocket) -> None:
     try:
         async with get_client().aio.live.connect(model=MODEL, config=live_cfg) as session:
             print(f"INFO: vertex live connected model={MODEL} location={LOCATION}", flush=True)
-            reader_task = asyncio.create_task(stream_vertex_to_browser(session, ws))
+            turn_state = {"awaiting_model_turn": False}
+            reader_task = asyncio.create_task(stream_vertex_to_browser(session, ws, turn_state))
             audio_chunks_received = 0
             input_mode = "audio"
             try:
@@ -222,6 +224,8 @@ async def task2_live(ws: WebSocket) -> None:
                     if msg_type == "audio_chunk":
                         if input_mode == "text":
                             continue
+                        if turn_state.get("awaiting_model_turn", False):
+                            continue
                         audio_b64 = (message.get("audioBase64") or "").strip()
                         if not audio_b64:
                             continue
@@ -240,10 +244,13 @@ async def task2_live(ws: WebSocket) -> None:
                     if msg_type == "audio_stream_end":
                         if input_mode == "text":
                             continue
+                        if turn_state.get("awaiting_model_turn", False):
+                            continue
                         print(
                             f"INFO: audio_stream_end received (chunks={audio_chunks_received})",
                             flush=True,
                         )
+                        turn_state["awaiting_model_turn"] = True
                         await session.send_realtime_input(audio_stream_end=True)
                         continue
 
