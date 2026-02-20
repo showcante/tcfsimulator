@@ -600,6 +600,15 @@ async function fetchJsonWithTimeout(url, init = {}, timeoutMs = 12000) {
   }
 }
 
+async function readBlobWithTimeout(response, timeoutMs = 10000) {
+  return await Promise.race([
+    response.blob(),
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("audio body timeout")), timeoutMs);
+    }),
+  ]);
+}
+
 async function playTextWithGemini(task, text) {
   const cleanText = (text || "").trim();
   if (!cleanText) return;
@@ -628,7 +637,10 @@ async function playTextWithGemini(task, text) {
       throw new Error(errorBody.error || `TTS request failed (${response.status})`);
     }
 
-    const audioBlob = await response.blob();
+    const audioBlob = await readBlobWithTimeout(response, 10000);
+    if (!audioBlob || audioBlob.size < 1024) {
+      throw new Error(`empty audio blob (${audioBlob ? audioBlob.size : 0} bytes)`);
+    }
     if (task2ExaminerAudioUrl) URL.revokeObjectURL(task2ExaminerAudioUrl);
     task2ExaminerAudioUrl = URL.createObjectURL(audioBlob);
 
@@ -669,7 +681,7 @@ async function playTextWithGemini(task, text) {
       speakingStatus[task].textContent = "Examiner audio ready - click play on the player";
       return;
     }
-    speakingStatus[task].textContent = "Examiner voice unavailable (text only)";
+    speakingStatus[task].textContent = `Examiner audio error: ${message.slice(0, 60)}`;
   }
 }
 
@@ -1359,7 +1371,10 @@ async function playPromptWithGemini(task) {
       throw new Error(errorBody.error || `TTS request failed (${response.status})`);
     }
 
-    const audioBlob = await response.blob();
+    const audioBlob = await readBlobWithTimeout(response, 10000);
+    if (!audioBlob || audioBlob.size < 1024) {
+      throw new Error(`empty audio blob (${audioBlob ? audioBlob.size : 0} bytes)`);
+    }
 
     if (promptAudioUrls[task]) {
       URL.revokeObjectURL(promptAudioUrls[task]);
@@ -1386,7 +1401,7 @@ async function playPromptWithGemini(task) {
 
     speakingStatus[task].textContent = "Playing (Gemini)";
   } catch (error) {
-    speakingStatus[task].textContent = "Gemini TTS error";
+    speakingStatus[task].textContent = `Gemini TTS error: ${String(error?.message || "unknown").slice(0, 60)}`;
     alert(`Gemini TTS failed: ${error.message}`);
   }
 }
