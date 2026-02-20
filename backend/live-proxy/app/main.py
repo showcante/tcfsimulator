@@ -198,11 +198,19 @@ async def task2_live(ws: WebSocket) -> None:
         except Exception as sensitivity_err:
             print(f"WARN: could not set speech sensitivity: {sensitivity_err}", flush=True)
 
-    live_cfg = types.LiveConnectConfig(
-        response_modalities=["AUDIO"],
-        speech_config=speech_cfg,
-        system_instruction=SYSTEM_INSTRUCTION,
-    )
+    live_cfg_kwargs = {
+        "response_modalities": ["AUDIO"],
+        "speech_config": speech_cfg,
+        "system_instruction": SYSTEM_INSTRUCTION,
+    }
+    transcription_cfg_cls = getattr(types, "AudioTranscriptionConfig", None)
+    if transcription_cfg_cls:
+        try:
+            live_cfg_kwargs["input_audio_transcription"] = transcription_cfg_cls(enabled=True)
+            print("INFO: input_audio_transcription enabled", flush=True)
+        except Exception as tx_err:
+            print(f"WARN: could not enable input_audio_transcription: {tx_err}", flush=True)
+    live_cfg = types.LiveConnectConfig(**live_cfg_kwargs)
 
     try:
         async with get_client().aio.live.connect(model=MODEL, config=live_cfg) as session:
@@ -224,7 +232,7 @@ async def task2_live(ws: WebSocket) -> None:
                             return
                         print("WARN: no model turn after audio_stream_end, sending turn_complete nudge", flush=True)
                         await session.send_client_content(
-                            turns=[types.Content(role="user", parts=[types.Part(text="(fin de tour)")])],
+                            turns=[types.Content(role="user", parts=[])],
                             turn_complete=True,
                         )
 
@@ -292,17 +300,11 @@ async def task2_live(ws: WebSocket) -> None:
                         )
                         turn_state["awaiting_model_turn"] = True
                         await session.send_realtime_input(audio_stream_end=True)
-                        try:
-                            await session.send_client_content(
-                                turns=[types.Content(role="user", parts=[])],
-                                turn_complete=True,
-                            )
-                        except Exception:
-                            await session.send_client_content(
-                                turns=[types.Content(role="user", parts=[types.Part(text=" ")])],
-                                turn_complete=True,
-                            )
-                        print("INFO: Turn forced via turn_complete", flush=True)
+                        await session.send_client_content(
+                            turns=[types.Content(role="user", parts=[])],
+                            turn_complete=True,
+                        )
+                        print("INFO: Force-committed user turn to Gemini", flush=True)
                         await schedule_turn_nudge()
                         continue
 
