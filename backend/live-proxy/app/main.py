@@ -172,13 +172,27 @@ async def task2_live(ws: WebSocket) -> None:
     await ws.accept()
     await ws.send_json({"type": "ready", "message": "Task 2 live socket connected"})
 
+    speech_cfg = types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=VOICE)
+        )
+    )
+    sensitivity_enum = getattr(types.SpeechConfig, "Sensitivity", None)
+    if sensitivity_enum and hasattr(sensitivity_enum, "HIGH"):
+        try:
+            speech_cfg = types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=VOICE)
+                ),
+                end_of_speech_sensitivity=sensitivity_enum.HIGH,
+            )
+            print("INFO: speech sensitivity configured: end_of_speech=HIGH", flush=True)
+        except Exception as sensitivity_err:
+            print(f"WARN: could not set speech sensitivity: {sensitivity_err}", flush=True)
+
     live_cfg = types.LiveConnectConfig(
         response_modalities=["AUDIO"],
-        speech_config=types.SpeechConfig(
-            voice_config=types.VoiceConfig(
-                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=VOICE)
-            )
-        ),
+        speech_config=speech_cfg,
         system_instruction=SYSTEM_INSTRUCTION,
     )
 
@@ -187,9 +201,27 @@ async def task2_live(ws: WebSocket) -> None:
             print(f"INFO: vertex live connected model={MODEL} location={LOCATION}", flush=True)
             turn_state = {"awaiting_model_turn": False}
             reader_task = asyncio.create_task(stream_vertex_to_browser(session, ws, turn_state))
+            pending_turn_nudge_task: Optional[asyncio.Task] = None
             audio_chunks_received = 0
             input_mode = "audio"
             try:
+                async def schedule_turn_nudge() -> None:
+                    nonlocal pending_turn_nudge_task
+                    if pending_turn_nudge_task and not pending_turn_nudge_task.done():
+                        pending_turn_nudge_task.cancel()
+
+                    async def _nudge() -> None:
+                        await asyncio.sleep(1.2)
+                        if not turn_state.get("awaiting_model_turn", False):
+                            return
+                        print("WARN: no model turn after audio_stream_end, sending turn_complete nudge", flush=True)
+                        await session.send_client_content(
+                            turns=[types.Content(role="user", parts=[types.Part(text="(fin de tour)")])],
+                            turn_complete=True,
+                        )
+
+                    pending_turn_nudge_task = asyncio.create_task(_nudge())
+
                 while True:
                     payload = await ws.receive_text()
                     try:
@@ -252,6 +284,18 @@ async def task2_live(ws: WebSocket) -> None:
                         )
                         turn_state["awaiting_model_turn"] = True
                         await session.send_realtime_input(audio_stream_end=True)
+                        try:
+                            await session.send_client_content(
+                                turns=[types.Content(role="user", parts=[])],
+                                turn_complete=True,
+                            )
+                        except Exception:
+                            await session.send_client_content(
+                                turns=[types.Content(role="user", parts=[types.Part(text=" ")])],
+                                turn_complete=True,
+                            )
+                        print("INFO: Turn forced via turn_complete", flush=True)
+                        await schedule_turn_nudge()
                         continue
 
                     if msg_type == "candidate_text":
@@ -268,6 +312,8 @@ async def task2_live(ws: WebSocket) -> None:
 
                     await ws.send_json({"type": "error", "message": f"Unsupported message type: {msg_type}"})
             finally:
+                if pending_turn_nudge_task and not pending_turn_nudge_task.done():
+                    pending_turn_nudge_task.cancel()
                 reader_task.cancel()
     except WebSocketDisconnect:
         return

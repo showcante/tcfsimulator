@@ -98,6 +98,8 @@ const task2NativeAudioState = {
   lastVoiceAt: 0,
 };
 const TASK2_USE_TEXT_TURNS = false;
+const TASK2_SILENCE_RMS_THRESHOLD = 0.06;
+const TASK2_SILENCE_END_MS = 800;
 let task2CaptionRecognizer = null;
 let task2CaptionActive = false;
 let task2CaptionRestartTimer = null;
@@ -966,7 +968,7 @@ async function startTask2NativeAudioCapture() {
         sumSquares += pcmInput[i] * pcmInput[i];
       }
       const rms = Math.sqrt(sumSquares / Math.max(1, pcmInput.length));
-      if (rms > 0.015) {
+      if (rms > TASK2_SILENCE_RMS_THRESHOLD) {
         task2NativeAudioState.lastVoiceAt = Date.now();
       }
       if (!TASK2_USE_TEXT_TURNS) {
@@ -997,7 +999,7 @@ async function startTask2NativeAudioCapture() {
       if (TASK2_USE_TEXT_TURNS) return;
       if (task2NativeAudioState.waitingExaminer) return;
       const silenceMs = Date.now() - task2NativeAudioState.lastVoiceAt;
-      if (silenceMs >= 1200) {
+      if (silenceMs >= TASK2_SILENCE_END_MS) {
         triggerTask2TurnEnd();
       }
     }, 220);
