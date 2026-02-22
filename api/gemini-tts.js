@@ -43,7 +43,35 @@ function pcm16ToWavBuffer(pcmBuffer, sampleRate = 24000, channels = 1) {
   return wav;
 }
 
-async function fetchWithTimeout(url, options, timeoutMs = 60000) {
+function chunkTextForTts(text) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return [];
+  const pieces = normalized.match(/[^.!?]+[.!?]?/g) || [normalized];
+  const chunks = [];
+  let current = "";
+  for (const partRaw of pieces) {
+    const part = partRaw.trim();
+    if (!part) continue;
+    if (!current) {
+      current = part;
+      continue;
+    }
+    if ((current + " " + part).length <= 120) {
+      current += " " + part;
+    } else {
+      chunks.push(current);
+      current = part;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function isAbortMessage(message) {
+  return /aborted|AbortError|operation was aborted/i.test(String(message || ""));
+}
+
+async function fetchWithTimeout(url, options, timeoutMs = 25000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -77,79 +105,101 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    const modelsToTry = [GEMINI_MODEL, "gemini-2.5-flash-preview-tts"];
+    const modelsToTry = [...new Set([GEMINI_MODEL, "gemini-2.5-flash-preview-tts"])].filter(Boolean);
     const voicesToTry = [requestedVoice, "Aoede", "Kore"].filter(
       (voice, index, arr) => voice && arr.indexOf(voice) === index
     );
-    let geminiResponse = null;
+    const textChunks = chunkTextForTts(text);
+    let combinedPcm = Buffer.alloc(0);
     let lastErrorText = "";
 
-    for (const modelName of modelsToTry) {
-      for (const voiceName of voicesToTry) {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
-        const requestPayload = {
-          contents: [
-            {
-              parts: [
-                {
-                  text: `Lis ce texte exactement, sans ajouter de mots.\nTexte:\n${text}`,
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            responseModalities: ["AUDIO"],
-            temperature: 0,
-            speechConfig: {
-              languageCode: "fr-CA",
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName,
+    for (let idx = 0; idx < textChunks.length; idx += 1) {
+      const chunk = textChunks[idx];
+      let chunkAudio = null;
+
+      for (const modelName of modelsToTry) {
+        for (const voiceName of voicesToTry) {
+          const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
+          const requestPayload = {
+            contents: [
+              {
+                parts: [
+                  {
+                    text: `Lis ce texte exactement, sans ajouter de mots.\nTexte:\n${chunk}`,
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+              temperature: 0,
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: {
+                    voiceName,
+                  },
                 },
               },
             },
-          },
-        };
+          };
 
-        geminiResponse = await fetchWithTimeout(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": GEMINI_API_KEY,
-          },
-          body: JSON.stringify(requestPayload),
-        }, 60000);
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            let geminiResponse;
+            try {
+              geminiResponse = await fetchWithTimeout(endpoint, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-goog-api-key": GEMINI_API_KEY,
+                },
+                body: JSON.stringify(requestPayload),
+              }, 25000);
+            } catch (error) {
+              lastErrorText = `[chunk=${idx + 1}/${textChunks.length} model=${modelName} voice=${voiceName}] ${error.message}`;
+              if (attempt === 0 && isAbortMessage(error?.message)) continue;
+              break;
+            }
 
-        if (geminiResponse.ok) break;
-        const errText = await geminiResponse.text();
-        lastErrorText = `[model=${modelName} voice=${voiceName}] ${errText}`;
+            if (!geminiResponse.ok) {
+              const errText = await geminiResponse.text().catch(() => "");
+              lastErrorText = `[chunk=${idx + 1}/${textChunks.length} model=${modelName} voice=${voiceName}] HTTP ${geminiResponse.status} ${errText}`;
+              break;
+            }
+
+            const data = await geminiResponse.json();
+            const inlineData = data?.candidates?.[0]?.content?.parts?.find((part) => part.inlineData)?.inlineData;
+            if (!inlineData?.data) {
+              lastErrorText = `[chunk=${idx + 1}/${textChunks.length} model=${modelName} voice=${voiceName}] Gemini response did not include audio data.`;
+              break;
+            }
+
+            let rawAudio = Buffer.from(inlineData.data, "base64");
+            const mimeType = inlineData.mimeType || "audio/pcm";
+            if (mimeType.includes("wav") && rawAudio.length > 44) {
+              rawAudio = rawAudio.slice(44);
+            }
+            if (!rawAudio.length) {
+              lastErrorText = `[chunk=${idx + 1}/${textChunks.length} model=${modelName} voice=${voiceName}] Empty audio buffer returned.`;
+              break;
+            }
+
+            chunkAudio = rawAudio;
+            break;
+          }
+          if (chunkAudio) break;
+        }
+        if (chunkAudio) break;
       }
-      if (geminiResponse?.ok) break;
+
+      if (!chunkAudio) {
+        sendJson(res, 502, { error: buildGeminiErrorMessage(lastErrorText) });
+        return;
+      }
+
+      combinedPcm = Buffer.concat([combinedPcm, chunkAudio]);
     }
 
-    if (!geminiResponse.ok) {
-      sendJson(res, 502, { error: buildGeminiErrorMessage(lastErrorText) });
-      return;
-    }
-
-    const data = await geminiResponse.json();
-    const inlineData = data?.candidates?.[0]?.content?.parts?.find((part) => part.inlineData)?.inlineData;
-
-    if (!inlineData?.data) {
-      sendJson(res, 502, { error: "Gemini response did not include audio data." });
-      return;
-    }
-
-    const rawAudio = Buffer.from(inlineData.data, "base64");
-    const mimeType = inlineData.mimeType || "audio/pcm";
-
-    if (mimeType.includes("wav")) {
-      res.setHeader("Content-Type", "audio/wav");
-      res.status(200).send(rawAudio);
-      return;
-    }
-
-    const wavAudio = pcm16ToWavBuffer(rawAudio, 24000, 1);
+    const wavAudio = pcm16ToWavBuffer(combinedPcm, 24000, 1);
     res.setHeader("Content-Type", "audio/wav");
     res.status(200).send(wavAudio);
   } catch (error) {
