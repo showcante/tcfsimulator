@@ -1254,6 +1254,7 @@ function isServerSttSelected() {
 }
 
 function shouldUseBrowserSttForTask(task) {
+  if (task === 3) return !!SpeechRecognition;
   return task === 2 && isTask2VertexMode() && !!SpeechRecognition;
 }
 
@@ -1366,7 +1367,9 @@ function playPromptWithBrowserVoice(task) {
 async function playPromptWithGemini(task) {
   speakingStatus[task].textContent = "Generating audio...";
   const requestedVoice = (geminiVoiceSelect.value || "Aoede").trim();
-  const effectiveVoice = requestedVoice.toLowerCase() === "kore" ? "Aoede" : requestedVoice;
+  const effectiveVoice = task === 3
+    ? "Aoede"
+    : (requestedVoice.toLowerCase() === "kore" ? "Aoede" : requestedVoice);
   if (requestedVoice.toLowerCase() === "kore") {
     speakingStatus[task].textContent = "Kore unavailable, using Aoede";
   }
@@ -1861,12 +1864,12 @@ function startRecognition(task) {
     return;
   }
 
-  const useBrowserForLiveTask2 = shouldUseBrowserSttForTask(task);
-  if (useBrowserForLiveTask2) {
+  const forceBrowserStt = shouldUseBrowserSttForTask(task);
+  if (forceBrowserStt) {
     sttProviderSelect.value = "browser";
   }
 
-  if (isServerSttSelected() && !useBrowserForLiveTask2) {
+  if (isServerSttSelected() && !forceBrowserStt) {
     startServerTranscription(task);
     return;
   }
