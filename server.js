@@ -59,6 +59,12 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function setSecurityHeaders(res) {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+}
+
 function buildSttErrorPayload(data, context) {
   const message = String(data?.error?.message || "");
   let hint = "";
@@ -521,10 +527,26 @@ async function handleTask2Examiner(req, res) {
 }
 
 function serveStatic(req, res) {
-  const targetPath = req.url === "/" ? "/index.html" : req.url;
-  const filePath = path.normalize(path.join(ROOT, targetPath));
+  let pathname = "/";
+  try {
+    pathname = new URL(req.url, "http://localhost").pathname || "/";
+  } catch {
+    sendJson(res, 400, { error: "Invalid URL" });
+    return;
+  }
 
-  if (!filePath.startsWith(ROOT)) {
+  const targetPath = pathname === "/" ? "/index.html" : pathname;
+  const resolvedRoot = path.resolve(ROOT);
+  const relativeTarget = targetPath.replace(/^\/+/, "");
+  const filePath = path.resolve(resolvedRoot, relativeTarget);
+  const relativePath = path.relative(resolvedRoot, filePath);
+  const pathParts = relativeTarget.split("/").filter(Boolean);
+
+  if (
+    relativePath.startsWith("..") ||
+    path.isAbsolute(relativePath) ||
+    pathParts.some((part) => part.startsWith("."))
+  ) {
     sendJson(res, 403, { error: "Forbidden" });
     return;
   }
@@ -537,12 +559,15 @@ function serveStatic(req, res) {
 
     const ext = path.extname(filePath).toLowerCase();
     const contentType = contentTypes[ext] || "application/octet-stream";
+    setSecurityHeaders(res);
     res.writeHead(200, { "Content-Type": contentType });
     res.end(content);
   });
 }
 
 const server = http.createServer((req, res) => {
+  setSecurityHeaders(res);
+
   if (req.method === "POST" && req.url === "/api/gemini-tts") {
     handleGeminiTts(req, res);
     return;
