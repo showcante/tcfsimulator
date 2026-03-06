@@ -37,6 +37,7 @@ const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
 const GOOGLE_STT_API_KEY = process.env.GOOGLE_STT_API_KEY;
+const MAX_JSON_BODY_BYTES = 1 * 1024 * 1024;
 
 if (GEMINI_API_KEY && !GEMINI_API_KEY.startsWith("AIza")) {
   console.warn(
@@ -57,6 +58,10 @@ const contentTypes = {
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload));
+}
+
+function isPayloadTooLargeError(error) {
+  return error && error.code === "PAYLOAD_TOO_LARGE";
 }
 
 function buildSttErrorPayload(data, context) {
@@ -140,7 +145,14 @@ async function handleGeminiTts(req, res) {
   }
 
   let body = "";
+  let size = 0;
   req.on("data", (chunk) => {
+    size += chunk.length;
+    if (size > MAX_JSON_BODY_BYTES) {
+      sendJson(res, 413, { error: "Payload too large." });
+      req.destroy();
+      return;
+    }
     body += chunk;
   });
 
@@ -231,15 +243,28 @@ async function handleGeminiTts(req, res) {
       res.writeHead(200, { "Content-Type": "audio/wav" });
       res.end(wavAudio);
     } catch (error) {
+      if (isPayloadTooLargeError(error)) {
+        sendJson(res, 413, { error: "Payload too large." });
+        return;
+      }
       sendJson(res, 500, { error: `Gemini TTS proxy failed: ${error.message}` });
     }
   });
 }
 
-function readJsonBody(req) {
+function readJsonBody(req, maxBytes = MAX_JSON_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     let body = "";
+    let size = 0;
     req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        const tooLargeError = new Error("Payload too large.");
+        tooLargeError.code = "PAYLOAD_TOO_LARGE";
+        reject(tooLargeError);
+        req.destroy();
+        return;
+      }
       body += chunk;
     });
     req.on("end", () => {
@@ -319,6 +344,10 @@ async function handleTranscribe(req, res) {
 
     sendJson(res, 200, { text });
   } catch (error) {
+    if (isPayloadTooLargeError(error)) {
+      sendJson(res, 413, { error: "Payload too large." });
+      return;
+    }
     sendJson(res, 500, { error: `Transcription proxy failed: ${error.message}` });
   }
 }
@@ -516,15 +545,40 @@ async function handleTask2Examiner(req, res) {
 
     sendJson(res, 200, { reply });
   } catch (error) {
+    if (isPayloadTooLargeError(error)) {
+      sendJson(res, 413, { error: "Payload too large." });
+      return;
+    }
     sendJson(res, 500, { error: `Task 2 examiner proxy failed: ${error.message}` });
   }
 }
 
 function serveStatic(req, res) {
-  const targetPath = req.url === "/" ? "/index.html" : req.url;
-  const filePath = path.normalize(path.join(ROOT, targetPath));
+  const rawPathname = (() => {
+    try {
+      return new URL(req.url || "/", "http://localhost").pathname;
+    } catch {
+      return "/";
+    }
+  })();
+  const decodedPathname = (() => {
+    try {
+      return decodeURIComponent(rawPathname);
+    } catch {
+      return rawPathname;
+    }
+  })();
+  const normalizedRelativePath =
+    decodedPathname === "/" ? "index.html" : decodedPathname.replace(/^\/+/, "");
 
-  if (!filePath.startsWith(ROOT)) {
+  // Never expose dotfiles (for example .env.local) through static serving.
+  if (normalizedRelativePath.split("/").some((segment) => segment.startsWith("."))) {
+    sendJson(res, 403, { error: "Forbidden" });
+    return;
+  }
+
+  const filePath = path.resolve(ROOT, normalizedRelativePath);
+  if (filePath !== ROOT && !filePath.startsWith(`${ROOT}${path.sep}`)) {
     sendJson(res, 403, { error: "Forbidden" });
     return;
   }
@@ -537,7 +591,10 @@ function serveStatic(req, res) {
 
     const ext = path.extname(filePath).toLowerCase();
     const contentType = contentTypes[ext] || "application/octet-stream";
-    res.writeHead(200, { "Content-Type": contentType });
+    res.writeHead(200, {
+      "Content-Type": contentType,
+      "X-Content-Type-Options": "nosniff",
+    });
     res.end(content);
   });
 }
