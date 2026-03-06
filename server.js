@@ -37,6 +37,7 @@ const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
 const GOOGLE_STT_API_KEY = process.env.GOOGLE_STT_API_KEY;
+const MAX_JSON_BODY_BYTES = Number(process.env.MAX_JSON_BODY_BYTES || 1024 * 1024);
 
 if (GEMINI_API_KEY && !GEMINI_API_KEY.startsWith("AIza")) {
   console.warn(
@@ -55,7 +56,10 @@ const contentTypes = {
 };
 
 function sendJson(res, statusCode, payload) {
-  res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+  });
   res.end(JSON.stringify(payload));
 }
 
@@ -133,124 +137,155 @@ async function fetchWithTimeout(url, options, timeoutMs = 60000) {
   }
 }
 
+function bodyTooLargeError(maxBytes) {
+  const error = new Error(`Request body exceeded ${maxBytes} bytes.`);
+  error.code = "BODY_TOO_LARGE";
+  return error;
+}
+
+async function readJsonBody(req, maxBytes = MAX_JSON_BODY_BYTES) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    let bodyBytes = 0;
+    let settled = false;
+
+    const settleReject = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+
+    const settleResolve = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    req.on("data", (chunk) => {
+      bodyBytes += chunk.length;
+      if (bodyBytes > maxBytes) {
+        req.destroy();
+        settleReject(bodyTooLargeError(maxBytes));
+        return;
+      }
+      body += chunk;
+    });
+
+    req.on("end", () => {
+      try {
+        settleResolve(JSON.parse(body || "{}"));
+      } catch (error) {
+        settleReject(error);
+      }
+    });
+    req.on("error", settleReject);
+  });
+}
+
 async function handleGeminiTts(req, res) {
   if (!GEMINI_API_KEY) {
     sendJson(res, 500, { error: "Missing GEMINI_API_KEY in server environment." });
     return;
   }
 
-  let body = "";
-  req.on("data", (chunk) => {
-    body += chunk;
-  });
+  try {
+    const parsed = await readJsonBody(req, MAX_JSON_BODY_BYTES);
+    const text = (parsed.text || "").trim();
+    const requestedVoice = (parsed.voiceName || "Kore").trim();
 
-  req.on("end", async () => {
-    try {
-      const parsed = JSON.parse(body || "{}");
-      const text = (parsed.text || "").trim();
-      const requestedVoice = (parsed.voiceName || "Kore").trim();
+    if (!text) {
+      sendJson(res, 400, { error: "Missing text for TTS." });
+      return;
+    }
 
-      if (!text) {
-        sendJson(res, 400, { error: "Missing text for TTS." });
-        return;
-      }
+    const modelsToTry = [GEMINI_MODEL, "gemini-2.5-flash-preview-tts"];
+    const voicesToTry = [requestedVoice, "Aoede", "Kore"].filter(
+      (voice, index, arr) => voice && arr.indexOf(voice) === index
+    );
+    let geminiResponse = null;
+    let lastErrorText = "";
 
-      const modelsToTry = [GEMINI_MODEL, "gemini-2.5-flash-preview-tts"];
-      const voicesToTry = [requestedVoice, "Aoede", "Kore"].filter(
-        (voice, index, arr) => voice && arr.indexOf(voice) === index
-      );
-      let geminiResponse = null;
-      let lastErrorText = "";
-
-      for (const modelName of modelsToTry) {
-        for (const voiceName of voicesToTry) {
-          const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
-          const requestPayload = {
-            contents: [
-              {
-                parts: [
-                  {
-                    text: `Lis ce texte exactement, sans ajouter de mots.\nTexte:\n${text}`,
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              responseModalities: ["AUDIO"],
-              temperature: 0,
-              speechConfig: {
-                languageCode: "fr-CA",
-                voiceConfig: {
-                  prebuiltVoiceConfig: {
-                    voiceName,
-                  },
+    for (const modelName of modelsToTry) {
+      for (const voiceName of voicesToTry) {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
+        const requestPayload = {
+          contents: [
+            {
+              parts: [
+                {
+                  text: `Lis ce texte exactement, sans ajouter de mots.\nTexte:\n${text}`,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            temperature: 0,
+            speechConfig: {
+              languageCode: "fr-CA",
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName,
                 },
               },
             },
-          };
+          },
+        };
 
-          geminiResponse = await fetchWithTimeout(endpoint, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-goog-api-key": GEMINI_API_KEY,
-            },
-            body: JSON.stringify(requestPayload),
-          }, 60000);
+        geminiResponse = await fetchWithTimeout(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY,
+          },
+          body: JSON.stringify(requestPayload),
+        }, 60000);
 
-          if (geminiResponse.ok) break;
-          const errText = await geminiResponse.text();
-          lastErrorText = `[model=${modelName} voice=${voiceName}] ${errText}`;
-        }
-        if (geminiResponse?.ok) break;
+        if (geminiResponse.ok) break;
+        const errText = await geminiResponse.text();
+        lastErrorText = `[model=${modelName} voice=${voiceName}] ${errText}`;
       }
-
-      if (!geminiResponse.ok) {
-        sendJson(res, 502, { error: buildGeminiErrorMessage(lastErrorText) });
-        return;
-      }
-
-      const data = await geminiResponse.json();
-      const inlineData = data?.candidates?.[0]?.content?.parts?.find((part) => part.inlineData)?.inlineData;
-
-      if (!inlineData?.data) {
-        sendJson(res, 502, { error: "Gemini response did not include audio data." });
-        return;
-      }
-
-      const rawAudio = Buffer.from(inlineData.data, "base64");
-      const mimeType = inlineData.mimeType || "audio/pcm";
-
-      if (mimeType.includes("wav")) {
-        res.writeHead(200, { "Content-Type": "audio/wav" });
-        res.end(rawAudio);
-        return;
-      }
-
-      const wavAudio = pcm16ToWavBuffer(rawAudio, 24000, 1);
-      res.writeHead(200, { "Content-Type": "audio/wav" });
-      res.end(wavAudio);
-    } catch (error) {
-      sendJson(res, 500, { error: `Gemini TTS proxy failed: ${error.message}` });
+      if (geminiResponse?.ok) break;
     }
-  });
-}
 
-function readJsonBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = "";
-    req.on("data", (chunk) => {
-      body += chunk;
+    if (!geminiResponse.ok) {
+      sendJson(res, 502, { error: buildGeminiErrorMessage(lastErrorText) });
+      return;
+    }
+
+    const data = await geminiResponse.json();
+    const inlineData = data?.candidates?.[0]?.content?.parts?.find((part) => part.inlineData)?.inlineData;
+
+    if (!inlineData?.data) {
+      sendJson(res, 502, { error: "Gemini response did not include audio data." });
+      return;
+    }
+
+    const rawAudio = Buffer.from(inlineData.data, "base64");
+    const mimeType = inlineData.mimeType || "audio/pcm";
+
+    if (mimeType.includes("wav")) {
+      res.writeHead(200, {
+        "Content-Type": "audio/wav",
+        "X-Content-Type-Options": "nosniff",
+      });
+      res.end(rawAudio);
+      return;
+    }
+
+    const wavAudio = pcm16ToWavBuffer(rawAudio, 24000, 1);
+    res.writeHead(200, {
+      "Content-Type": "audio/wav",
+      "X-Content-Type-Options": "nosniff",
     });
-    req.on("end", () => {
-      try {
-        resolve(JSON.parse(body || "{}"));
-      } catch (error) {
-        reject(error);
-      }
-    });
-    req.on("error", reject);
-  });
+    res.end(wavAudio);
+  } catch (error) {
+    if (error?.code === "BODY_TOO_LARGE") {
+      sendJson(res, 413, { error: `Payload too large. Max ${MAX_JSON_BODY_BYTES} bytes.` });
+      return;
+    }
+    sendJson(res, 500, { error: `Gemini TTS proxy failed: ${error.message}` });
+  }
 }
 
 async function handleTranscribe(req, res) {
@@ -260,7 +295,7 @@ async function handleTranscribe(req, res) {
   }
 
   try {
-    const parsed = await readJsonBody(req);
+    const parsed = await readJsonBody(req, MAX_JSON_BODY_BYTES);
     const audioBase64 = (parsed.audioBase64 || "").trim();
     const mimeType = (parsed.mimeType || "audio/webm").trim();
     const sampleRateHertz = Number(parsed.sampleRateHertz || 0);
@@ -319,6 +354,10 @@ async function handleTranscribe(req, res) {
 
     sendJson(res, 200, { text });
   } catch (error) {
+    if (error?.code === "BODY_TOO_LARGE") {
+      sendJson(res, 413, { error: `Payload too large. Max ${MAX_JSON_BODY_BYTES} bytes.` });
+      return;
+    }
     sendJson(res, 500, { error: `Transcription proxy failed: ${error.message}` });
   }
 }
@@ -417,7 +456,7 @@ async function handleTask2Examiner(req, res) {
   }
 
   try {
-    const parsed = await readJsonBody(req);
+    const parsed = await readJsonBody(req, MAX_JSON_BODY_BYTES);
     const taskPrompt = (parsed.taskPrompt || "").trim();
     const userText = (parsed.userText || "").trim();
     const history = Array.isArray(parsed.history) ? parsed.history : [];
@@ -516,15 +555,35 @@ async function handleTask2Examiner(req, res) {
 
     sendJson(res, 200, { reply });
   } catch (error) {
+    if (error?.code === "BODY_TOO_LARGE") {
+      sendJson(res, 413, { error: `Payload too large. Max ${MAX_JSON_BODY_BYTES} bytes.` });
+      return;
+    }
     sendJson(res, 500, { error: `Task 2 examiner proxy failed: ${error.message}` });
   }
 }
 
 function serveStatic(req, res) {
-  const targetPath = req.url === "/" ? "/index.html" : req.url;
-  const filePath = path.normalize(path.join(ROOT, targetPath));
+  let requestUrl;
+  try {
+    requestUrl = new URL(req.url, "http://localhost");
+  } catch {
+    sendJson(res, 400, { error: "Invalid URL" });
+    return;
+  }
 
-  if (!filePath.startsWith(ROOT)) {
+  const targetPath = requestUrl.pathname === "/" ? "/index.html" : requestUrl.pathname;
+  const relativePath = targetPath.replace(/^\/+/, "");
+  const segments = relativePath.split("/");
+  if (segments.some((segment) => segment.startsWith(".") && segment.length > 1)) {
+    sendJson(res, 403, { error: "Forbidden" });
+    return;
+  }
+
+  const filePath = path.resolve(ROOT, relativePath);
+  const rootWithSep = `${ROOT}${path.sep}`;
+
+  if (filePath !== ROOT && !filePath.startsWith(rootWithSep)) {
     sendJson(res, 403, { error: "Forbidden" });
     return;
   }
@@ -537,7 +596,10 @@ function serveStatic(req, res) {
 
     const ext = path.extname(filePath).toLowerCase();
     const contentType = contentTypes[ext] || "application/octet-stream";
-    res.writeHead(200, { "Content-Type": contentType });
+    res.writeHead(200, {
+      "Content-Type": contentType,
+      "X-Content-Type-Options": "nosniff",
+    });
     res.end(content);
   });
 }
