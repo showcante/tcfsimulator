@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = __dirname;
+const MAX_JSON_BODY_BYTES = Number(process.env.MAX_JSON_BODY_BYTES || 1024 * 1024);
 
 function loadDotEnvLocal() {
   const envPath = path.join(ROOT, ".env.local");
@@ -55,7 +56,10 @@ const contentTypes = {
 };
 
 function sendJson(res, statusCode, payload) {
-  res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+  });
   res.end(JSON.stringify(payload));
 }
 
@@ -139,14 +143,8 @@ async function handleGeminiTts(req, res) {
     return;
   }
 
-  let body = "";
-  req.on("data", (chunk) => {
-    body += chunk;
-  });
-
-  req.on("end", async () => {
-    try {
-      const parsed = JSON.parse(body || "{}");
+  readJsonBody(req)
+    .then(async (parsed) => {
       const text = (parsed.text || "").trim();
       const requestedVoice = (parsed.voiceName || "Kore").trim();
 
@@ -222,28 +220,46 @@ async function handleGeminiTts(req, res) {
       const mimeType = inlineData.mimeType || "audio/pcm";
 
       if (mimeType.includes("wav")) {
-        res.writeHead(200, { "Content-Type": "audio/wav" });
+        res.writeHead(200, {
+          "Content-Type": "audio/wav",
+          "X-Content-Type-Options": "nosniff",
+        });
         res.end(rawAudio);
         return;
       }
 
       const wavAudio = pcm16ToWavBuffer(rawAudio, 24000, 1);
-      res.writeHead(200, { "Content-Type": "audio/wav" });
+      res.writeHead(200, {
+        "Content-Type": "audio/wav",
+        "X-Content-Type-Options": "nosniff",
+      });
       res.end(wavAudio);
-    } catch (error) {
+    })
+    .catch((error) => {
+      if (error?.message === "BODY_TOO_LARGE") {
+        sendJson(res, 413, { error: "Payload too large." });
+        return;
+      }
       sendJson(res, 500, { error: `Gemini TTS proxy failed: ${error.message}` });
-    }
-  });
+    });
 }
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
-    let body = "";
+    const chunks = [];
+    let totalSize = 0;
     req.on("data", (chunk) => {
-      body += chunk;
+      totalSize += chunk.length;
+      if (totalSize > MAX_JSON_BODY_BYTES) {
+        reject(new Error("BODY_TOO_LARGE"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
     });
     req.on("end", () => {
       try {
+        const body = Buffer.concat(chunks).toString("utf8");
         resolve(JSON.parse(body || "{}"));
       } catch (error) {
         reject(error);
@@ -319,6 +335,10 @@ async function handleTranscribe(req, res) {
 
     sendJson(res, 200, { text });
   } catch (error) {
+    if (error?.message === "BODY_TOO_LARGE") {
+      sendJson(res, 413, { error: "Payload too large." });
+      return;
+    }
     sendJson(res, 500, { error: `Transcription proxy failed: ${error.message}` });
   }
 }
@@ -516,15 +536,25 @@ async function handleTask2Examiner(req, res) {
 
     sendJson(res, 200, { reply });
   } catch (error) {
+    if (error?.message === "BODY_TOO_LARGE") {
+      sendJson(res, 413, { error: "Payload too large." });
+      return;
+    }
     sendJson(res, 500, { error: `Task 2 examiner proxy failed: ${error.message}` });
   }
 }
 
 function serveStatic(req, res) {
-  const targetPath = req.url === "/" ? "/index.html" : req.url;
-  const filePath = path.normalize(path.join(ROOT, targetPath));
+  const requestUrl = new URL(req.url, "http://localhost");
+  const targetPath = requestUrl.pathname === "/" ? "/index.html" : requestUrl.pathname;
+  const segments = targetPath.split("/");
+  if (segments.some((segment) => segment.startsWith(".") && segment !== "." && segment !== "..")) {
+    sendJson(res, 403, { error: "Forbidden" });
+    return;
+  }
+  const filePath = path.resolve(ROOT, `.${targetPath}`);
 
-  if (!filePath.startsWith(ROOT)) {
+  if (filePath !== ROOT && !filePath.startsWith(`${ROOT}${path.sep}`)) {
     sendJson(res, 403, { error: "Forbidden" });
     return;
   }
@@ -537,7 +567,10 @@ function serveStatic(req, res) {
 
     const ext = path.extname(filePath).toLowerCase();
     const contentType = contentTypes[ext] || "application/octet-stream";
-    res.writeHead(200, { "Content-Type": contentType });
+    res.writeHead(200, {
+      "Content-Type": contentType,
+      "X-Content-Type-Options": "nosniff",
+    });
     res.end(content);
   });
 }
