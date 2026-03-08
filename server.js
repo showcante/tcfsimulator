@@ -37,6 +37,7 @@ const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
 const GOOGLE_STT_API_KEY = process.env.GOOGLE_STT_API_KEY;
+const MAX_JSON_BODY_BYTES = 20 * 1024 * 1024;
 
 if (GEMINI_API_KEY && !GEMINI_API_KEY.startsWith("AIza")) {
   console.warn(
@@ -57,6 +58,39 @@ const contentTypes = {
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload));
+}
+
+function readRawBody(req, maxBytes = MAX_JSON_BODY_BYTES) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    let seen = 0;
+    let finished = false;
+
+    req.on("data", (chunk) => {
+      if (finished) return;
+      seen += chunk.length;
+      if (seen > maxBytes) {
+        finished = true;
+        const err = new Error("Payload too large");
+        err.code = "PAYLOAD_TOO_LARGE";
+        req.destroy(err);
+        reject(err);
+        return;
+      }
+      body += chunk;
+    });
+
+    req.on("end", () => {
+      if (finished) return;
+      finished = true;
+      resolve(body);
+    });
+    req.on("error", (error) => {
+      if (finished) return;
+      finished = true;
+      reject(error);
+    });
+  });
 }
 
 function buildSttErrorPayload(data, context) {
@@ -139,118 +173,102 @@ async function handleGeminiTts(req, res) {
     return;
   }
 
-  let body = "";
-  req.on("data", (chunk) => {
-    body += chunk;
-  });
+  try {
+    const parsed = JSON.parse(await readRawBody(req));
+    const text = (parsed.text || "").trim();
+    const requestedVoice = (parsed.voiceName || "Kore").trim();
 
-  req.on("end", async () => {
-    try {
-      const parsed = JSON.parse(body || "{}");
-      const text = (parsed.text || "").trim();
-      const requestedVoice = (parsed.voiceName || "Kore").trim();
+    if (!text) {
+      sendJson(res, 400, { error: "Missing text for TTS." });
+      return;
+    }
 
-      if (!text) {
-        sendJson(res, 400, { error: "Missing text for TTS." });
-        return;
-      }
+    const modelsToTry = [GEMINI_MODEL, "gemini-2.5-flash-preview-tts"];
+    const voicesToTry = [requestedVoice, "Aoede", "Kore"].filter(
+      (voice, index, arr) => voice && arr.indexOf(voice) === index
+    );
+    let geminiResponse = null;
+    let lastErrorText = "";
 
-      const modelsToTry = [GEMINI_MODEL, "gemini-2.5-flash-preview-tts"];
-      const voicesToTry = [requestedVoice, "Aoede", "Kore"].filter(
-        (voice, index, arr) => voice && arr.indexOf(voice) === index
-      );
-      let geminiResponse = null;
-      let lastErrorText = "";
-
-      for (const modelName of modelsToTry) {
-        for (const voiceName of voicesToTry) {
-          const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
-          const requestPayload = {
-            contents: [
-              {
-                parts: [
-                  {
-                    text: `Lis ce texte exactement, sans ajouter de mots.\nTexte:\n${text}`,
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              responseModalities: ["AUDIO"],
-              temperature: 0,
-              speechConfig: {
-                languageCode: "fr-CA",
-                voiceConfig: {
-                  prebuiltVoiceConfig: {
-                    voiceName,
-                  },
+    for (const modelName of modelsToTry) {
+      for (const voiceName of voicesToTry) {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
+        const requestPayload = {
+          contents: [
+            {
+              parts: [
+                {
+                  text: `Lis ce texte exactement, sans ajouter de mots.\nTexte:\n${text}`,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            temperature: 0,
+            speechConfig: {
+              languageCode: "fr-CA",
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName,
                 },
               },
             },
-          };
+          },
+        };
 
-          geminiResponse = await fetchWithTimeout(endpoint, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-goog-api-key": GEMINI_API_KEY,
-            },
-            body: JSON.stringify(requestPayload),
-          }, 60000);
+        geminiResponse = await fetchWithTimeout(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY,
+          },
+          body: JSON.stringify(requestPayload),
+        }, 60000);
 
-          if (geminiResponse.ok) break;
-          const errText = await geminiResponse.text();
-          lastErrorText = `[model=${modelName} voice=${voiceName}] ${errText}`;
-        }
-        if (geminiResponse?.ok) break;
+        if (geminiResponse.ok) break;
+        const errText = await geminiResponse.text();
+        lastErrorText = `[model=${modelName} voice=${voiceName}] ${errText}`;
       }
-
-      if (!geminiResponse.ok) {
-        sendJson(res, 502, { error: buildGeminiErrorMessage(lastErrorText) });
-        return;
-      }
-
-      const data = await geminiResponse.json();
-      const inlineData = data?.candidates?.[0]?.content?.parts?.find((part) => part.inlineData)?.inlineData;
-
-      if (!inlineData?.data) {
-        sendJson(res, 502, { error: "Gemini response did not include audio data." });
-        return;
-      }
-
-      const rawAudio = Buffer.from(inlineData.data, "base64");
-      const mimeType = inlineData.mimeType || "audio/pcm";
-
-      if (mimeType.includes("wav")) {
-        res.writeHead(200, { "Content-Type": "audio/wav" });
-        res.end(rawAudio);
-        return;
-      }
-
-      const wavAudio = pcm16ToWavBuffer(rawAudio, 24000, 1);
-      res.writeHead(200, { "Content-Type": "audio/wav" });
-      res.end(wavAudio);
-    } catch (error) {
-      sendJson(res, 500, { error: `Gemini TTS proxy failed: ${error.message}` });
+      if (geminiResponse?.ok) break;
     }
-  });
+
+    if (!geminiResponse.ok) {
+      sendJson(res, 502, { error: buildGeminiErrorMessage(lastErrorText) });
+      return;
+    }
+
+    const data = await geminiResponse.json();
+    const inlineData = data?.candidates?.[0]?.content?.parts?.find((part) => part.inlineData)?.inlineData;
+
+    if (!inlineData?.data) {
+      sendJson(res, 502, { error: "Gemini response did not include audio data." });
+      return;
+    }
+
+    const rawAudio = Buffer.from(inlineData.data, "base64");
+    const mimeType = inlineData.mimeType || "audio/pcm";
+
+    if (mimeType.includes("wav")) {
+      res.writeHead(200, { "Content-Type": "audio/wav" });
+      res.end(rawAudio);
+      return;
+    }
+
+    const wavAudio = pcm16ToWavBuffer(rawAudio, 24000, 1);
+    res.writeHead(200, { "Content-Type": "audio/wav" });
+    res.end(wavAudio);
+  } catch (error) {
+    if (error?.code === "PAYLOAD_TOO_LARGE") {
+      sendJson(res, 413, { error: "Request payload too large." });
+      return;
+    }
+    sendJson(res, 500, { error: `Gemini TTS proxy failed: ${error.message}` });
+  }
 }
 
 function readJsonBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = "";
-    req.on("data", (chunk) => {
-      body += chunk;
-    });
-    req.on("end", () => {
-      try {
-        resolve(JSON.parse(body || "{}"));
-      } catch (error) {
-        reject(error);
-      }
-    });
-    req.on("error", reject);
-  });
+  return readRawBody(req).then((body) => JSON.parse(body || "{}"));
 }
 
 async function handleTranscribe(req, res) {
@@ -319,6 +337,10 @@ async function handleTranscribe(req, res) {
 
     sendJson(res, 200, { text });
   } catch (error) {
+    if (error?.code === "PAYLOAD_TOO_LARGE") {
+      sendJson(res, 413, { error: "Request payload too large." });
+      return;
+    }
     sendJson(res, 500, { error: `Transcription proxy failed: ${error.message}` });
   }
 }
@@ -516,15 +538,41 @@ async function handleTask2Examiner(req, res) {
 
     sendJson(res, 200, { reply });
   } catch (error) {
+    if (error?.code === "PAYLOAD_TOO_LARGE") {
+      sendJson(res, 413, { error: "Request payload too large." });
+      return;
+    }
     sendJson(res, 500, { error: `Task 2 examiner proxy failed: ${error.message}` });
   }
 }
 
 function serveStatic(req, res) {
-  const targetPath = req.url === "/" ? "/index.html" : req.url;
+  let pathname = "/";
+  try {
+    pathname = new URL(req.url, "http://localhost").pathname;
+  } catch {
+    sendJson(res, 400, { error: "Bad request path." });
+    return;
+  }
+
+  let targetPath = pathname === "/" ? "/index.html" : pathname;
+  try {
+    targetPath = decodeURIComponent(targetPath);
+  } catch {
+    sendJson(res, 400, { error: "Bad request path." });
+    return;
+  }
+
   const filePath = path.normalize(path.join(ROOT, targetPath));
 
-  if (!filePath.startsWith(ROOT)) {
+  if (filePath !== ROOT && !filePath.startsWith(`${ROOT}${path.sep}`)) {
+    sendJson(res, 403, { error: "Forbidden" });
+    return;
+  }
+
+  const relativePath = path.relative(ROOT, filePath);
+  const pathSegments = relativePath.split(path.sep).filter(Boolean);
+  if (pathSegments.some((segment) => segment.startsWith("."))) {
     sendJson(res, 403, { error: "Forbidden" });
     return;
   }
