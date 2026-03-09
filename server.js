@@ -37,6 +37,7 @@ const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
 const GOOGLE_STT_API_KEY = process.env.GOOGLE_STT_API_KEY;
+const MAX_JSON_BODY_BYTES = Number(process.env.MAX_JSON_BODY_BYTES || 2 * 1024 * 1024);
 
 if (GEMINI_API_KEY && !GEMINI_API_KEY.startsWith("AIza")) {
   console.warn(
@@ -57,6 +58,40 @@ const contentTypes = {
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload));
+}
+
+function sendBodyTooLarge(res) {
+  sendJson(res, 413, {
+    error: `Request body exceeds ${MAX_JSON_BODY_BYTES} bytes.`,
+    code: "BODY_TOO_LARGE",
+  });
+}
+
+function readRawBody(req, maxBytes = MAX_JSON_BODY_BYTES) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+
+    req.on("data", (chunk) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        const error = new Error(`Request body too large (>${maxBytes} bytes)`);
+        error.code = "BODY_TOO_LARGE";
+        req.destroy(error);
+        reject(error);
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on("end", () => {
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+
+    req.on("error", (error) => {
+      reject(error);
+    });
+  });
 }
 
 function buildSttErrorPayload(data, context) {
@@ -139,14 +174,9 @@ async function handleGeminiTts(req, res) {
     return;
   }
 
-  let body = "";
-  req.on("data", (chunk) => {
-    body += chunk;
-  });
-
-  req.on("end", async () => {
-    try {
-      const parsed = JSON.parse(body || "{}");
+  try {
+    const body = await readRawBody(req);
+    const parsed = JSON.parse(body || "{}");
       const text = (parsed.text || "").trim();
       const requestedVoice = (parsed.voiceName || "Kore").trim();
 
@@ -227,29 +257,29 @@ async function handleGeminiTts(req, res) {
         return;
       }
 
-      const wavAudio = pcm16ToWavBuffer(rawAudio, 24000, 1);
-      res.writeHead(200, { "Content-Type": "audio/wav" });
-      res.end(wavAudio);
-    } catch (error) {
-      sendJson(res, 500, { error: `Gemini TTS proxy failed: ${error.message}` });
+    const wavAudio = pcm16ToWavBuffer(rawAudio, 24000, 1);
+    res.writeHead(200, { "Content-Type": "audio/wav" });
+    res.end(wavAudio);
+  } catch (error) {
+    if (error?.code === "BODY_TOO_LARGE") {
+      sendBodyTooLarge(res);
+      return;
     }
-  });
+    sendJson(res, 500, { error: `Gemini TTS proxy failed: ${error.message}` });
+  }
 }
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
-    let body = "";
-    req.on("data", (chunk) => {
-      body += chunk;
-    });
-    req.on("end", () => {
+    readRawBody(req)
+      .then((body) => {
       try {
         resolve(JSON.parse(body || "{}"));
       } catch (error) {
         reject(error);
       }
-    });
-    req.on("error", reject);
+      })
+      .catch(reject);
   });
 }
 
@@ -319,6 +349,10 @@ async function handleTranscribe(req, res) {
 
     sendJson(res, 200, { text });
   } catch (error) {
+    if (error?.code === "BODY_TOO_LARGE") {
+      sendBodyTooLarge(res);
+      return;
+    }
     sendJson(res, 500, { error: `Transcription proxy failed: ${error.message}` });
   }
 }
@@ -516,15 +550,34 @@ async function handleTask2Examiner(req, res) {
 
     sendJson(res, 200, { reply });
   } catch (error) {
+    if (error?.code === "BODY_TOO_LARGE") {
+      sendBodyTooLarge(res);
+      return;
+    }
     sendJson(res, 500, { error: `Task 2 examiner proxy failed: ${error.message}` });
   }
 }
 
 function serveStatic(req, res) {
-  const targetPath = req.url === "/" ? "/index.html" : req.url;
-  const filePath = path.normalize(path.join(ROOT, targetPath));
+  let pathname;
+  try {
+    pathname = decodeURIComponent(new URL(req.url, `http://${req.headers.host || "localhost"}`).pathname);
+  } catch {
+    sendJson(res, 400, { error: "Bad request URL" });
+    return;
+  }
 
-  if (!filePath.startsWith(ROOT)) {
+  const targetPath = pathname === "/" ? "/index.html" : pathname;
+  const segments = targetPath.split("/").filter(Boolean);
+  if (segments.some((segment) => segment.startsWith("."))) {
+    sendJson(res, 403, { error: "Forbidden" });
+    return;
+  }
+
+  const filePath = path.normalize(path.join(ROOT, targetPath));
+  const rootPrefix = ROOT.endsWith(path.sep) ? ROOT : `${ROOT}${path.sep}`;
+
+  if (filePath !== ROOT && !filePath.startsWith(rootPrefix)) {
     sendJson(res, 403, { error: "Forbidden" });
     return;
   }
